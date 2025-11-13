@@ -1080,7 +1080,7 @@ class EsastGenPass(BaseAstGenPass[es.Statement]):
                     callee=self.sync_loc(
                         es.Identifier(name="__jacSpawn"), jac_node=node
                     ),
-                    arguments=[left, right_name, right.arguments],
+                    arguments=[right_name, left, right.arguments],
                 ),
                 jac_node=node,
             )
@@ -1503,7 +1503,7 @@ class EsastGenPass(BaseAstGenPass[es.Statement]):
                             ]
 
                         # Build args object {param1: arg1, param2: arg2, ...}
-                        props: list[Union[es.Property, es.SpreadElement]] = []
+                        props = []
                         for i, arg in enumerate(args):
                             if isinstance(arg, es.SpreadElement):
                                 # Handle spread arguments
