@@ -1067,7 +1067,11 @@ class EsastGenPass(BaseAstGenPass[es.Statement]):
         if op_name == Tok.KW_SPAWN:
             right_name = self.sync_loc(
                 es.Literal(
-                    value=right.callee.name if isinstance(right.callee, es.Identifier) else ""
+                    value=(
+                        right.callee.name
+                        if isinstance(right.callee, es.Identifier)
+                        else ""
+                    )
                 ),
                 jac_node=node.right,
             )
@@ -1076,7 +1080,7 @@ class EsastGenPass(BaseAstGenPass[es.Statement]):
                     callee=self.sync_loc(
                         es.Identifier(name="__jacSpawn"), jac_node=node
                     ),
-                    arguments=[left, right_name,  right.arguments],
+                    arguments=[left, right_name, right.arguments],
                 ),
                 jac_node=node,
             )
@@ -1585,19 +1589,19 @@ class EsastGenPass(BaseAstGenPass[es.Statement]):
             )
         else:
             callee_type = None
-        args_obj = self.sync_loc(
-            es.ObjectExpression(properties=props), jac_node=node
-        )
+        args_obj = self.sync_loc(es.ObjectExpression(properties=props), jac_node=node)
         if isinstance(callee_type, jtypes.ClassType) and isinstance(
             callee, es.Expression
         ):
             # Ensure callee is an Expression for NewExpression
             node.gen.es_ast = self.sync_loc(
-                es.NewExpression(callee=callee, arguments=args_obj if props else args), jac_node=node
+                es.NewExpression(callee=callee, arguments=args_obj if props else args),
+                jac_node=node,
             )
         else:
             node.gen.es_ast = self.sync_loc(
-                es.CallExpression(callee=callee, arguments=args_obj if props else args), jac_node=node
+                es.CallExpression(callee=callee, arguments=args_obj if props else args),
+                jac_node=node,
             )
 
     def exit_index_slice(self, node: uni.IndexSlice) -> None:
