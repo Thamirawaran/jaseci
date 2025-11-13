@@ -1065,12 +1065,18 @@ class EsastGenPass(BaseAstGenPass[es.Statement]):
         op_name = getattr(node.op, "name", None)
 
         if op_name == Tok.KW_SPAWN:
+            right_name = self.sync_loc(
+                es.Literal(
+                    value=right.callee.name if isinstance(right.callee, es.Identifier) else ""
+                ),
+                jac_node=node.right,
+            )
             spawn_call = self.sync_loc(
                 es.CallExpression(
                     callee=self.sync_loc(
                         es.Identifier(name="__jacSpawn"), jac_node=node
                     ),
-                    arguments=[left, right],
+                    arguments=[left, right_name,  right.arguments],
                 ),
                 jac_node=node,
             )
@@ -1429,7 +1435,33 @@ class EsastGenPass(BaseAstGenPass[es.Statement]):
                 target_is_type = True
 
         args: list[Union[es.Expression, es.SpreadElement]] = []
+        props: list[Union[es.Property, es.SpreadElement]] = []
         for param in node.params:
+            if isinstance(param, uni.KWPair):
+                key_expr = (
+                    param.key.gen.es_ast
+                    if param.key and param.key.gen.es_ast
+                    else self.sync_loc(es.Identifier(name="key"), jac_node=param)
+                )
+                value_expr = (
+                    param.value.gen.es_ast
+                    if param.value and param.value.gen.es_ast
+                    else self.sync_loc(es.Literal(value=None), jac_node=param)
+                )
+                prop = self.sync_loc(
+                    es.Property(
+                        key=key_expr,
+                        value=value_expr,
+                        kind="init",
+                        method=False,
+                        shorthand=False,
+                        computed=False,
+                    ),
+                    jac_node=param,
+                )
+                props.append(prop)
+                continue
+
             if param.gen.es_ast:
                 args.append(param.gen.es_ast)
 
@@ -1553,16 +1585,19 @@ class EsastGenPass(BaseAstGenPass[es.Statement]):
             )
         else:
             callee_type = None
+        args_obj = self.sync_loc(
+            es.ObjectExpression(properties=props), jac_node=node
+        )
         if isinstance(callee_type, jtypes.ClassType) and isinstance(
             callee, es.Expression
         ):
             # Ensure callee is an Expression for NewExpression
             node.gen.es_ast = self.sync_loc(
-                es.NewExpression(callee=callee, arguments=args), jac_node=node
+                es.NewExpression(callee=callee, arguments=args_obj if props else args), jac_node=node
             )
         else:
             node.gen.es_ast = self.sync_loc(
-                es.CallExpression(callee=callee, arguments=args), jac_node=node
+                es.CallExpression(callee=callee, arguments=args_obj if props else args), jac_node=node
             )
 
     def exit_index_slice(self, node: uni.IndexSlice) -> None:
