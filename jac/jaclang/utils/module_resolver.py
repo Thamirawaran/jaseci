@@ -60,7 +60,7 @@ def resolve_module(target: str, base_path: str) -> Tuple[str, str]:
     """Resolve module path and infer language."""
     base_dir = os.path.dirname(base_path)
     other_target = os.path.join(base_dir, target)
-    if os.path.exists(other_target):
+    if os.path.exists(other_target) and os.path.isfile(other_target):
         return other_target, "other"
 
     parts = target.split(".")
