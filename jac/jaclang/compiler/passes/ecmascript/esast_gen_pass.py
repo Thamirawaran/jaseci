@@ -1821,7 +1821,7 @@ class EsastGenPass(BaseAstGenPass[es.Statement]):
                     ),
                     jac_node=node,
                 )
-        # (/^\s*class\b/.test(func.toString()) ? new func(...args) : func(...args));
+        # __jac_isClass(func) ? new func(...args) : func(...args));
         args_obj = self.sync_loc(es.ObjectExpression(properties=props), jac_node=node)
         new_expr = self.sync_loc(
             es.NewExpression(callee=callee, arguments=args_obj if props else args),
@@ -1831,38 +1831,12 @@ class EsastGenPass(BaseAstGenPass[es.Statement]):
             es.CallExpression(callee=callee, arguments=args_obj if props else args),
             jac_node=node,
         )
-        cond_argument = self.sync_loc(
-            es.CallExpression(
-                callee=self.sync_loc(
-                    es.MemberExpression(
-                        object=callee,
-                        property=self.sync_loc(
-                            es.Identifier(name="toString"), jac_node=node
-                        ),
-                        computed=False,
-                    ),
-                    jac_node=node,
-                ),
-                arguments=[],
-            ),
-            jac_node=node,
-        )
         cond_call_expr = self.sync_loc(
             es.CallExpression(
                 callee=self.sync_loc(
-                    es.MemberExpression(
-                        object=self.sync_loc(
-                            es.Literal(value="/^\\s*class\\b/", raw="/^\\s*class\\b/"),
-                            jac_node=node,
-                        ),
-                        property=self.sync_loc(
-                            es.Identifier(name="test"), jac_node=node
-                        ),
-                        computed=False,
-                    ),
-                    jac_node=node,
+                    es.Identifier(name="__jac_isClass"), jac_node=node
                 ),
-                arguments=[cond_argument],
+                arguments=[callee],
             ),
             jac_node=node,
         )

@@ -54,6 +54,15 @@ def __buildDom(node: any) -> any {
     return element;
 }
 
+# Built-in helper functions for JavaScript
+def __jac_isClass(value: any) -> bool {
+    if type(value) != function {
+        return False;
+    }
+    src = Function.prototype.toString.call(value).trim();
+    return src.startsWith("class");
+}
+
 # Internal: Apply property to DOM element
 def __applyProp(element: any, key: str, value: any) -> None {
     if key.startswith("on") {
