@@ -1834,7 +1834,7 @@ class EsastGenPass(BaseAstGenPass[es.Statement]):
         cond_call_expr = self.sync_loc(
             es.CallExpression(
                 callee=self.sync_loc(
-                    es.Identifier(name="__jac_isClass"), jac_node=node
+                    es.Identifier(name="__jacIsClass"), jac_node=node
                 ),
                 arguments=[callee],
             ),

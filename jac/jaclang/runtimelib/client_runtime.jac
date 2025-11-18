@@ -55,7 +55,7 @@ def __buildDom(node: any) -> any {
 }
 
 # Built-in helper functions for JavaScript
-def __jac_isClass(value: any) -> bool {
+def __jacIsClass(value: any) -> bool {
     if type(value) != function {
         return False;
     }
