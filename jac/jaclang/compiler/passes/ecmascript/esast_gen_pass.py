@@ -31,7 +31,6 @@ from jaclang.compiler.constant import SymbolType, Tokens as Tok
 from jaclang.compiler.passes.ast_gen import BaseAstGenPass
 from jaclang.compiler.passes.ast_gen.jsx_processor import EsJsxProcessor
 from jaclang.compiler.passes.ecmascript.es_unparse import es_to_js
-from jaclang.compiler.type_system import types as jtypes
 from jaclang.utils import convert_to_js_import_path
 
 ES_LOGICAL_OPS: dict[Tok, str] = {Tok.KW_AND: "&&", Tok.KW_OR: "||"}
@@ -1822,26 +1821,59 @@ class EsastGenPass(BaseAstGenPass[es.Statement]):
                     ),
                     jac_node=node,
                 )
-        if isinstance(node.target, uni.Name):
-            callee_type = self.prog.get_type_evaluator().get_type_of_expression(
-                node.target
-            )
-        else:
-            callee_type = None
+        # (/^\s*class\b/.test(func.toString()) ? new func(...args) : func(...args));
         args_obj = self.sync_loc(es.ObjectExpression(properties=props), jac_node=node)
-        if isinstance(callee_type, jtypes.ClassType) and isinstance(
-            callee, es.Expression
-        ):
-            # Ensure callee is an Expression for NewExpression
-            node.gen.es_ast = self.sync_loc(
-                es.NewExpression(callee=callee, arguments=args_obj if props else args),
-                jac_node=node,
-            )
-        else:
-            node.gen.es_ast = self.sync_loc(
-                es.CallExpression(callee=callee, arguments=args_obj if props else args),
-                jac_node=node,
-            )
+        new_expr = self.sync_loc(
+            es.NewExpression(callee=callee, arguments=args_obj if props else args),
+            jac_node=node,
+        )
+        call_expr = self.sync_loc(
+            es.CallExpression(callee=callee, arguments=args_obj if props else args),
+            jac_node=node,
+        )
+        cond_argument = self.sync_loc(
+            es.CallExpression(
+                callee=self.sync_loc(
+                    es.MemberExpression(
+                        object=callee,
+                        property=self.sync_loc(
+                            es.Identifier(name="toString"), jac_node=node
+                        ),
+                        computed=False,
+                    ),
+                    jac_node=node,
+                ),
+                arguments=[],
+            ),
+            jac_node=node,
+        )
+        cond_call_expr = self.sync_loc(
+            es.CallExpression(
+                callee=self.sync_loc(
+                    es.MemberExpression(
+                        object=self.sync_loc(
+                            es.Literal(value="/^\\s*class\\b/", raw="/^\\s*class\\b/"),
+                            jac_node=node,
+                        ),
+                        property=self.sync_loc(
+                            es.Identifier(name="test"), jac_node=node
+                        ),
+                        computed=False,
+                    ),
+                    jac_node=node,
+                ),
+                arguments=[cond_argument],
+            ),
+            jac_node=node,
+        )
+        node.gen.es_ast = self.sync_loc(
+            es.ConditionalExpression(
+                test=cond_call_expr,
+                consequent=new_expr,
+                alternate=call_expr,
+            ),
+            jac_node=node,
+        )
 
     def exit_index_slice(self, node: uni.IndexSlice) -> None:
         """Process index/slice - just store the slice info, actual member access is handled by AtomTrailer."""
