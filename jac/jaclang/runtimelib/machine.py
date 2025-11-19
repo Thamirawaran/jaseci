@@ -59,6 +59,7 @@ from jaclang.runtimelib.constructs import (
 )
 from jaclang.runtimelib.memory import Memory, Shelf, ShelfStorage
 from jaclang.runtimelib.mtp import MTIR
+from jaclang.runtimelib.server import ResponseBuilder
 from jaclang.runtimelib.utils import (
     all_issubclass,
     traverse_graph,
@@ -1482,6 +1483,12 @@ class JacAPIServer:
         return ModuleIntrospector(module_name, base_path)
 
 
+class JacResponseBuilder(ResponseBuilder):
+    """Jac Response Builder."""
+
+    pass
+
+
 class JacByLLM:
     """Jac byLLM integration."""
 
@@ -1771,6 +1778,7 @@ class JacMachineInterface(
     JacClientBundle,
     JacAPIServer,
     JacByLLM,
+    JacResponseBuilder,
     JacUtils,
 ):
     """Jac Feature."""
