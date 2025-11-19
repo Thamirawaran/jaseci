@@ -1821,7 +1821,7 @@ class EsastGenPass(BaseAstGenPass[es.Statement]):
                     ),
                     jac_node=node,
                 )
-        # __jac_isClass(func) ? new func(...args) : func(...args));
+        # new Date() ? typeof Date ==='function' && Date.toString().startsWith('class') : Date();
         args_obj = self.sync_loc(es.ObjectExpression(properties=props), jac_node=node)
         new_expr = self.sync_loc(
             es.NewExpression(callee=callee, arguments=args_obj if props else args),
@@ -1831,12 +1831,65 @@ class EsastGenPass(BaseAstGenPass[es.Statement]):
             es.CallExpression(callee=callee, arguments=args_obj if props else args),
             jac_node=node,
         )
-        cond_call_expr = self.sync_loc(
+        # Build: typeof callee === 'function'
+        typeof_check = self.sync_loc(
+            es.BinaryExpression(
+                operator="===",
+                left=self.sync_loc(
+                    es.UnaryExpression(
+                        operator="typeof",
+                        prefix=True,
+                        argument=callee,
+                    ),
+                    jac_node=node,
+                ),
+                right=self.sync_loc(es.Literal(value="function"), jac_node=node),
+            ),
+            jac_node=node,
+        )
+
+        # Build: callee.toString()
+        to_string_call = self.sync_loc(
             es.CallExpression(
                 callee=self.sync_loc(
-                    es.Identifier(name="__jacIsClass"), jac_node=node
+                    es.MemberExpression(
+                        object=callee,
+                        property=self.sync_loc(
+                            es.Identifier(name="toString"), jac_node=node
+                        ),
+                        computed=False,
+                    ),
+                    jac_node=node,
                 ),
-                arguments=[callee],
+                arguments=[],
+            ),
+            jac_node=node,
+        )
+
+        # Build: callee.toString().startsWith('class')
+        starts_with_check = self.sync_loc(
+            es.CallExpression(
+                callee=self.sync_loc(
+                    es.MemberExpression(
+                        object=to_string_call,
+                        property=self.sync_loc(
+                            es.Identifier(name="startsWith"), jac_node=node
+                        ),
+                        computed=False,
+                    ),
+                    jac_node=node,
+                ),
+                arguments=[self.sync_loc(es.Literal(value="class"), jac_node=node)],
+            ),
+            jac_node=node,
+        )
+
+        # Build: typeof callee === 'function' && callee.toString().startsWith('class')
+        cond_call_expr = self.sync_loc(
+            es.LogicalExpression(
+                operator="&&",
+                left=typeof_check,
+                right=starts_with_check,
             ),
             jac_node=node,
         )
