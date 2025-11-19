@@ -31,7 +31,6 @@ from jaclang.compiler.constant import SymbolType, Tokens as Tok
 from jaclang.compiler.passes.ast_gen import BaseAstGenPass
 from jaclang.compiler.passes.ast_gen.jsx_processor import EsJsxProcessor
 from jaclang.compiler.passes.ecmascript.es_unparse import es_to_js
-from jaclang.compiler.type_system import types as jtypes
 from jaclang.utils import convert_to_js_import_path, resolve_relative_path
 
 ES_LOGICAL_OPS: dict[Tok, str] = {Tok.KW_AND: "&&", Tok.KW_OR: "||"}
