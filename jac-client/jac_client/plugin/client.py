@@ -96,35 +96,9 @@ class JacClient:
 
     @staticmethod
     @hookimpl
-    def send_json(
-        handler: BaseHTTPRequestHandler, status: StatusCode, data: dict[str, JsonValue]
-    ) -> None:
-        """Send JSON response."""
-        # Raise not implemented error
-        raise NotImplementedError("send_json method is not implemented")
-
-    @staticmethod
-    @hookimpl
-    def send_html(
-        handler: BaseHTTPRequestHandler, status: StatusCode, body: str
-    ) -> None:
-        """Send HTML response with CORS headers."""
-        from jaclang.runtimelib.server import ResponseBuilder
-
-        ResponseBuilder.send_html(handler, status, body)
-
-    @staticmethod
-    @hookimpl
-    def send_javascript(handler: BaseHTTPRequestHandler, code: str) -> None:
-        """Send JavaScript response."""
-        from jaclang.runtimelib.server import ResponseBuilder
-
-        ResponseBuilder.send_javascript(handler, code)
-
-    @staticmethod
-    @hookimpl
     def _add_cors_headers(handler: BaseHTTPRequestHandler) -> None:
         """Add CORS headers to response."""
+        # Custom add cors handlers can be implemented here. and remove the implementation below
         from jaclang.runtimelib.server import ResponseBuilder
 
         ResponseBuilder._add_cors_headers(handler)
