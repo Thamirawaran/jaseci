@@ -691,7 +691,6 @@ class JacClassReferences:
     """Default Classes References."""
 
     TYPE_CHECKING: bool = TYPE_CHECKING
-    EdgeDir: TypeAlias = EdgeDir
     DSFunc: TypeAlias = ObjectSpatialFunction
 
     Obj: TypeAlias = Archetype
