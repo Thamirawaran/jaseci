@@ -18,6 +18,7 @@ JsonValue: TypeAlias = (
 )
 StatusCode: TypeAlias = Literal[200, 201, 400, 401, 404, 503]
 
+
 class JacClientModuleIntrospector(ModuleIntrospector):
     """Jac Client Module Introspector."""
 
@@ -92,7 +93,7 @@ class JacClient:
     ) -> ModuleIntrospector:
         """Get a module introspector for the supplied module."""
         return JacClientModuleIntrospector(module_name, base_path)
-    
+
     @staticmethod
     @hookimpl
     def send_json(
@@ -109,6 +110,7 @@ class JacClient:
     ) -> None:
         """Send HTML response with CORS headers."""
         from jaclang.runtimelib.server import ResponseBuilder
+
         ResponseBuilder.send_html(handler, status, body)
 
     @staticmethod
@@ -116,6 +118,7 @@ class JacClient:
     def send_javascript(handler: BaseHTTPRequestHandler, code: str) -> None:
         """Send JavaScript response."""
         from jaclang.runtimelib.server import ResponseBuilder
+
         ResponseBuilder.send_javascript(handler, code)
 
     @staticmethod
@@ -123,6 +126,7 @@ class JacClient:
     def _add_cors_headers(handler: BaseHTTPRequestHandler) -> None:
         """Add CORS headers to response."""
         from jaclang.runtimelib.server import ResponseBuilder
+
         ResponseBuilder._add_cors_headers(handler)
 
     @staticmethod
