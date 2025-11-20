@@ -1,7 +1,8 @@
 import html
 import types
+from http.server import BaseHTTPRequestHandler
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, TypeAlias
 
 from jaclang.runtimelib.client_bundle import ClientBundle
 from jaclang.runtimelib.machine import (
@@ -12,6 +13,10 @@ from jaclang.runtimelib.server import ModuleIntrospector
 
 from .vite_client_bundle import ViteClientBundleBuilder
 
+JsonValue: TypeAlias = (
+    None | str | int | float | bool | list["JsonValue"] | dict[str, "JsonValue"]
+)
+StatusCode: TypeAlias = Literal[200, 201, 400, 401, 404, 503]
 
 class JacClientModuleIntrospector(ModuleIntrospector):
     """Jac Client Module Introspector."""
@@ -87,3 +92,46 @@ class JacClient:
     ) -> ModuleIntrospector:
         """Get a module introspector for the supplied module."""
         return JacClientModuleIntrospector(module_name, base_path)
+    
+    @staticmethod
+    @hookimpl
+    def send_json(
+        handler: BaseHTTPRequestHandler, status: StatusCode, data: dict[str, JsonValue]
+    ) -> None:
+        """Send JSON response."""
+        # Raise not implemented error
+        raise NotImplementedError("send_json method is not implemented")
+
+    @staticmethod
+    @hookimpl
+    def send_html(
+        handler: BaseHTTPRequestHandler, status: StatusCode, body: str
+    ) -> None:
+        """Send HTML response with CORS headers."""
+        from jaclang.runtimelib.server import ResponseBuilder
+        ResponseBuilder.send_html(handler, status, body)
+
+    @staticmethod
+    @hookimpl
+    def send_javascript(handler: BaseHTTPRequestHandler, code: str) -> None:
+        """Send JavaScript response."""
+        from jaclang.runtimelib.server import ResponseBuilder
+        ResponseBuilder.send_javascript(handler, code)
+
+    @staticmethod
+    @hookimpl
+    def _add_cors_headers(handler: BaseHTTPRequestHandler) -> None:
+        """Add CORS headers to response."""
+        from jaclang.runtimelib.server import ResponseBuilder
+        ResponseBuilder._add_cors_headers(handler)
+
+    @staticmethod
+    @hookimpl
+    def send_static_file(
+        handler: BaseHTTPRequestHandler,
+        file_path: Path,
+        content_type: str | None = None,
+    ) -> None:
+        """Send static file response (images, fonts, etc.)."""
+        # Raise not implemented error
+        raise NotImplementedError("send_static_file method is not implemented")
