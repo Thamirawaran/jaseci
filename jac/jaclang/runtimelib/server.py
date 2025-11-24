@@ -603,7 +603,7 @@ class ResponseBuilder:
         """Send JSON response with CORS headers."""
         handler.send_response(status)
         handler.send_header("Content-Type", "application/json")
-        Jac._add_cors_headers(handler)
+        ResponseBuilder._add_cors_headers(handler)
         handler.end_headers()
         handler.wfile.write(json.dumps(data).encode())
 
@@ -616,7 +616,7 @@ class ResponseBuilder:
         handler.send_response(status)
         handler.send_header("Content-Type", "text/html; charset=utf-8")
         handler.send_header("Content-Length", str(len(payload)))
-        Jac._add_cors_headers(handler)
+        ResponseBuilder._add_cors_headers(handler)
         handler.end_headers()
         handler.wfile.write(payload)
 
@@ -628,7 +628,7 @@ class ResponseBuilder:
         handler.send_header("Content-Type", "application/javascript; charset=utf-8")
         handler.send_header("Content-Length", str(len(payload)))
         handler.send_header("Cache-Control", "no-cache")
-        Jac._add_cors_headers(handler)
+        ResponseBuilder._add_cors_headers(handler)
         handler.end_headers()
         handler.wfile.write(payload)
 
@@ -640,7 +640,7 @@ class ResponseBuilder:
         handler.send_header("Content-Type", "text/css; charset=utf-8")
         handler.send_header("Content-Length", str(len(payload)))
         handler.send_header("Cache-Control", "no-cache")
-        Jac._add_cors_headers(handler)
+        ResponseBuilder._add_cors_headers(handler)
         handler.end_headers()
         handler.wfile.write(payload)
 
