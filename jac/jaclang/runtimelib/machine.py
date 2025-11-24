@@ -1517,13 +1517,6 @@ class JacResponseBuilder:
         ResponseBuilder.send_javascript(handler, code)
 
     @staticmethod
-    def _add_cors_headers(handler: BaseHTTPRequestHandler) -> None:
-        """Add CORS headers to response."""
-        from jaclang.runtimelib.server import ResponseBuilder
-
-        ResponseBuilder._add_cors_headers(handler)
-
-    @staticmethod
     def send_css(handler: BaseHTTPRequestHandler, css_code: str) -> None:
         """Send CSS response."""
         from jaclang.runtimelib.server import ResponseBuilder

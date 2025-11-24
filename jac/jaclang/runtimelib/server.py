@@ -835,7 +835,7 @@ class JacAPIServer:
             def do_OPTIONS(self) -> None:  # noqa: N802
                 """Handle OPTIONS requests (CORS preflight)."""
                 self.send_response(200)
-                Jac._add_cors_headers(self)
+                ResponseBuilder._add_cors_headers(self)
                 self.end_headers()
 
             def do_GET(self) -> None:  # noqa: N802
