@@ -1845,9 +1845,26 @@ class EsastGenPass(BaseAstGenPass[es.Statement]):
                 es.CallExpression(callee=callee, arguments=args_obj if props else args),
                 jac_node=node,
             )
-        print(
-            f"Generated function call AST for node {node}: {type(node.gen.es_ast)} and unparsed {node.unparse()}"
-        )
+        if isinstance(node.target, uni.Name) and node.target.sym_name == "JsInstance":
+            first_arg = (
+                node.params[0].target.gen.es_ast
+                if isinstance(node.params[0], uni.FuncCall)
+                else args[0]
+            )
+            other_args = (
+                [i.gen.es_ast for i in node.params[0].params]
+                if isinstance(node.params[0], uni.FuncCall)
+                else args[1:]
+            )
+            node.gen.es_ast = self.sync_loc(
+                es.CallExpression(
+                    callee=self.sync_loc(
+                        es.Identifier(name="JsInstance"), jac_node=node
+                    ),
+                    arguments=[first_arg] + other_args,
+                ),
+                jac_node=node,
+            )
 
     def exit_index_slice(self, node: uni.IndexSlice) -> None:
         """Process index/slice - just store the slice info, actual member access is handled by AtomTrailer."""
