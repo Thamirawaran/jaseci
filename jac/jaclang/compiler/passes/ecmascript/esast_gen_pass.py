@@ -31,6 +31,7 @@ from jaclang.compiler.constant import SymbolType, Tokens as Tok
 from jaclang.compiler.passes.ast_gen import BaseAstGenPass
 from jaclang.compiler.passes.ast_gen.jsx_processor import EsJsxProcessor
 from jaclang.compiler.passes.ecmascript.es_unparse import es_to_js
+from jaclang.compiler.type_system import types as jtypes
 from jaclang.utils import convert_to_js_import_path, resolve_relative_path
 
 ES_LOGICAL_OPS: dict[Tok, str] = {Tok.KW_AND: "&&", Tok.KW_OR: "||"}
@@ -1824,85 +1825,28 @@ class EsastGenPass(BaseAstGenPass[es.Statement]):
                     ),
                     jac_node=node,
                 )
-        # new Date() ? typeof Date ==='function' && Date.toString().startsWith('class') : Date();
+        if isinstance(node.target, uni.Name):
+            callee_type = self.prog.get_type_evaluator().get_type_of_expression(
+                node.target
+            )
+        else:
+            callee_type = None
         args_obj = self.sync_loc(es.ObjectExpression(properties=props), jac_node=node)
-        new_expr = self.sync_loc(
-            es.NewExpression(callee=callee, arguments=args_obj if props else args),
-            jac_node=node,
-        )
-        call_expr = self.sync_loc(
-            es.CallExpression(callee=callee, arguments=args_obj if props else args),
-            jac_node=node,
-        )
-        # Build: typeof callee === 'function'
-        typeof_check = self.sync_loc(
-            es.BinaryExpression(
-                operator="===",
-                left=self.sync_loc(
-                    es.UnaryExpression(
-                        operator="typeof",
-                        prefix=True,
-                        argument=callee,
-                    ),
-                    jac_node=node,
-                ),
-                right=self.sync_loc(es.Literal(value="function"), jac_node=node),
-            ),
-            jac_node=node,
-        )
-
-        # Build: callee.toString()
-        to_string_call = self.sync_loc(
-            es.CallExpression(
-                callee=self.sync_loc(
-                    es.MemberExpression(
-                        object=callee,
-                        property=self.sync_loc(
-                            es.Identifier(name="toString"), jac_node=node
-                        ),
-                        computed=False,
-                    ),
-                    jac_node=node,
-                ),
-                arguments=[],
-            ),
-            jac_node=node,
-        )
-
-        # Build: callee.toString().startsWith('class')
-        starts_with_check = self.sync_loc(
-            es.CallExpression(
-                callee=self.sync_loc(
-                    es.MemberExpression(
-                        object=to_string_call,
-                        property=self.sync_loc(
-                            es.Identifier(name="startsWith"), jac_node=node
-                        ),
-                        computed=False,
-                    ),
-                    jac_node=node,
-                ),
-                arguments=[self.sync_loc(es.Literal(value="class"), jac_node=node)],
-            ),
-            jac_node=node,
-        )
-
-        # Build: typeof callee === 'function' && callee.toString().startsWith('class')
-        cond_call_expr = self.sync_loc(
-            es.LogicalExpression(
-                operator="&&",
-                left=typeof_check,
-                right=starts_with_check,
-            ),
-            jac_node=node,
-        )
-        node.gen.es_ast = self.sync_loc(
-            es.ConditionalExpression(
-                test=cond_call_expr,
-                consequent=new_expr,
-                alternate=call_expr,
-            ),
-            jac_node=node,
+        if isinstance(callee_type, jtypes.ClassType) and isinstance(
+            callee, es.Expression
+        ):
+            # Ensure callee is an Expression for NewExpression
+            node.gen.es_ast = self.sync_loc(
+                es.NewExpression(callee=callee, arguments=args_obj if props else args),
+                jac_node=node,
+            )
+        else:
+            node.gen.es_ast = self.sync_loc(
+                es.CallExpression(callee=callee, arguments=args_obj if props else args),
+                jac_node=node,
+            )
+        print(
+            f"Generated function call AST for node {node}: {type(node.gen.es_ast)} and unparsed {node.unparse()}"
         )
 
     def exit_index_slice(self, node: uni.IndexSlice) -> None:

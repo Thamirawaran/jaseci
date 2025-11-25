@@ -1,4 +1,14 @@
 """Client-side runtime for Jac JSX and walker interactions."""
+cl import from "builtin.js" {callToNew}
+
+cl def JsClass(func: Callable) -> Callable {
+    # Wrapper to allow class-like instantiation
+    def wrapper(...args: any) -> any {
+        return callToNew(func, ...args);
+    }
+    return wrapper;
+}
+
 cl {
 # JSX factory function
 def __jacJsx(tag: any, props: dict = {}, children: list = []) -> dict {
