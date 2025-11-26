@@ -38,6 +38,13 @@ def loop_examples(limit: int) -> int {
         total += i * 2;
     }
 
+    for i=0 to i<limit by i+=1 {
+        if i == 3 {
+            break;
+        }
+        total += i;
+    }
+
     counter = limit;
     while counter > 0 {
         total -= 1;
