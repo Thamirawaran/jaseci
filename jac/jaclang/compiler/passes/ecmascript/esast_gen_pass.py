@@ -1119,6 +1119,31 @@ class EsastGenPass(BaseAstGenPass[es.Statement]):
         )
         node.gen.es_ast = while_stmt
 
+    def exit_iter_for_stmt(self, node: uni.IterForStmt) -> None:
+        """Process traditional for statement."""
+        init: Optional[es.VariableDeclaration | es.Expression] = None
+        if node.iter:
+            if node.iter.gen.es_ast:
+                init = node.iter.gen.es_ast
+
+        test: Optional[es.Expression] = None
+        if node.condition:
+            if node.condition.gen.es_ast:
+                test = node.condition.gen.es_ast
+
+        update: Optional[es.Expression] = None
+        if node.count_by:
+            if node.count_by.gen.es_ast:
+                update = node.count_by.gen.es_ast
+
+        body = self._build_block_statement(node, node.body)
+
+        for_stmt = self.sync_loc(
+            es.ForStatement(init=init, test=test, update=update, body=body),
+            jac_node=node,
+        )
+        node.gen.es_ast = for_stmt
+
     def exit_in_for_stmt(self, node: uni.InForStmt) -> None:
         """Process for-in statement."""
         left = (

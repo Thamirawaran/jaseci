@@ -88,7 +88,12 @@ class JSCodeGenerator:
 
     def gen_for_statement(self, node: es.ForStatement) -> str:
         """Generate for statement."""
-        init = self.generate(node.init) if node.init else ""
+        if node.init:
+            init = self.generate(node.init)
+            if init.endswith(";"):
+                init = init.rstrip(";")
+        else:
+            init = ""
         test = self.generate(node.test) if node.test else ""
         update = self.generate(node.update) if node.update else ""
         body = self.generate(node.body)
