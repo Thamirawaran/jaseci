@@ -2,7 +2,7 @@
 cl import from ".builtin.js" {createInstance}
 
 cl def JsInstance(constructor: any, *args: any) -> any {
-    return createInstance(constructor, args);
+    return Reflect.construct(constructor, [args]);
 }
 
 cl {
