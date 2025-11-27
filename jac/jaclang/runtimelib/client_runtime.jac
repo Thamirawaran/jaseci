@@ -1,5 +1,4 @@
 """Client-side runtime for Jac JSX and walker interactions."""
-cl import from ".builtin.js" {createInstance}
 
 cl def JsInstance(constructor: any, *args: any) -> any {
     return Reflect.construct(constructor, [args]);
