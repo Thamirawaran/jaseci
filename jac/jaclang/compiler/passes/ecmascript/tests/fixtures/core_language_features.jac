@@ -30,7 +30,8 @@ def fibonacci(n: int) -> int {
 
 def loop_examples(limit: int) -> int {
     total = 0;
-    for i in range(limit) {
+    array = [1, 2, 3, 4, 5];
+    for i in array {
         if i % 2 == 0 {
             total += i;
             continue;
