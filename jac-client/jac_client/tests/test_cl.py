@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import json
-import tempfile
 import subprocess
+import tempfile
+from pathlib import Path
 
+from jac_client.plugin.vite_client_bundle import ViteClientBundleBuilder
 from jaclang.runtimelib.machine import JacMachine as Jac
 from jaclang.utils.test import TestCase
-from jac_client.plugin.vite_client_bundle import ViteClientBundleBuilder
 
 
 class ViteClientBundleBuilderTests(TestCase):
@@ -213,7 +213,6 @@ export default defineConfig({
     def test_build_bundle_with_antd(self) -> None:
         """Test that Vite bundling works with Ant Design components."""
         with tempfile.TemporaryDirectory() as temp_dir:
-
             temp_path = Path(temp_dir)
 
             # Create project with Vite and Ant Design installed
@@ -508,5 +507,47 @@ export default defineConfig({
                 len(bundle_files), 0, "Expected at least one bundle file"
             )
 
+            # Cleanup
+            builder.cleanup_temp_dir()
+
+    def test_serve_cl_file(self) -> None:
+        """Test that serving a .cl file works correctly."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+
+            # Create project with Vite installed
+            package_json, output_dir = self._create_test_project_with_vite(temp_path)
+            runtime_path = (
+                Path(__file__).parent.parent / "plugin" / "client_runtime.jac"
+            )
+
+            # Initialize the Vite builder
+            builder = ViteClientBundleBuilder(
+                runtime_path=runtime_path,
+                vite_package_json=package_json,
+                vite_output_dir=output_dir,
+                vite_minify=False,
+            )
+
+            # Import the test module with both spawn operator orderings
+            fixtures_dir = Path(__file__).parent / "fixtures" / "cl_file"
+            (module,) = Jac.jac_import("app", str(fixtures_dir))
+
+            # Build the bundle
+            bundle = builder.build(module, force=True)
+            # Verify bundle structure
+            self.assertIsNotNone(bundle)
+            self.assertEqual(bundle.module_name, "app")
+            self.assertIn("app", bundle.client_functions)
+
+            self.assertIn("function app()", bundle.code)
+            self.assertIn(
+                '__jacJsx("div", {}, [__jacJsx("h2", {}, ["My Todos"])', bundle.code
+            )
+            self.assertIn("root.render(/* @__PURE__ */ React.c", bundle.code)
+            self.assertIn(
+                "ar _useState = reactExports.useState([]), _useStat", bundle.code
+            )
+            self.assertIn('turn __jacSpawn("create_todo", ', bundle.code)
             # Cleanup
             builder.cleanup_temp_dir()

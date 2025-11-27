@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-
-from typing import Callable, TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from jaclang.runtimelib.machine import hookimpl
 
@@ -46,7 +46,7 @@ class JacMachine:
                 mtir = MTIR.factory(
                     caller=caller,
                     args=invoke_args,
-                    call_params=model.llm_connector.call_params,
+                    call_params=model.call_params,
                 )
                 return model.invoke(mtir=mtir)
 
