@@ -33,7 +33,7 @@ walker create_todo {
     }
 }
 
-walker read_todos {
+walker :pub read_todos {
     can read with `root entry {
         visit [-->(`?Todo)];
     }
@@ -43,7 +43,7 @@ walker read_todos {
     }
 }
 
-walker toggle_todo {
+walker :protect toggle_todo {
     can toggle with Todo entry {
         here.done = not here.done;
         report here ;
