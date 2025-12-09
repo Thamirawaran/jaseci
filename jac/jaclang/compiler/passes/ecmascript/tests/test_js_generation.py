@@ -180,7 +180,7 @@ def test_client_fixture_generates_client_bundle(
     js_code = compile_fixture_to_js(client_fixture, fixture_path)
 
     for pattern in [
-        'const API_URL = "https://api.example.com";',
+        'let API_URL = "https://api.example.com";',
         "function component()",
         '__jacJsx("div"',
         "class ButtonProps",
@@ -249,15 +249,15 @@ def test_type_to_typeof_transformation() -> None:
     jac_code = '''"""Test type() to typeof conversion."""
 
 cl def check_types() {
-    let x = 42;
-    let y = "hello";
-    let obj = {"key": "value"};
-    let arr = [1, 2, 3];
+    x = 42;
+    y = "hello";
+    my_obj = {"key": "value"};
+    arr = [1, 2, 3];
 
-    let t1 = type(x);
-    let t2 = type(y);
-    let t3 = type(obj);
-    let t4 = type(arr[0]);
+    t1 = type(x);
+    t2 = type(y);
+    t3 = type(my_obj);
+    t4 = type(arr[0]);
 
     return t1;
 }
@@ -270,7 +270,7 @@ cl def check_types() {
     try:
         js_code = compile_fixture_to_js(temp_path)
 
-        for pattern in ["typeof x", "typeof y", "typeof obj", "typeof arr[0]"]:
+        for pattern in ["typeof x", "typeof y", "typeof my_obj", "typeof arr[0]"]:
             assert pattern in js_code
         assert "type(" not in js_code
         assert js_code.count("typeof") == 4
@@ -367,7 +367,7 @@ def test_assignment_inside_globvar_js(fixture_path: Callable[[str], str]) -> Non
     fixture_file_path = fixture_path("js_gen_bug.jac")
     js_code = compile_fixture_to_js(fixture_file_path)
     expected_generated_code = [
-        "const setB = item => {",
+        "let setB = item => {",
         "item.b = 90;",
     ]
     for pattern in expected_generated_code:
@@ -421,8 +421,8 @@ import from .components.Button { Button }
 
 # Using imported functions
 def test_usage() {
-    let formatter = MessageFormatter();
-    return formatter.format("test");
+    fmt = MessageFormatter();
+    return fmt.format("test");
 }
 }
 '''
@@ -577,20 +577,20 @@ def test_fstring_edge_cases() -> None:
     jac_code = '''"""Test f-string edge cases."""
 
 cl def test_edge_cases() -> dict {
-    let name = "Alice";
-    let value = 42;
+    name = "Alice";
+    value = 42;
 
     # Text only (no interpolation)
-    let text_only = f"This is just plain text";
+    text_only = f"This is just plain text";
 
     # Expression only (no static text)
-    let expr_only = f"{value}";
+    expr_only = f"{value}";
 
     # Multiple consecutive expressions
-    let consecutive = f"{name}{value}";
+    consecutive = f"{name}{value}";
 
     # Mixed with spaces
-    let mixed = f"Name: {name}, Value: {value}";
+    mixed = f"Name: {name}, Value: {value}";
 
     return {"text": text_only, "expr": expr_only, "cons": consecutive, "mixed": mixed};
 }
