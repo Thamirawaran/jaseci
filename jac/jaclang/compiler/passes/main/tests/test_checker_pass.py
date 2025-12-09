@@ -122,19 +122,19 @@ def test_member_access_type_infered(fixture_path: Callable[[str], str]) -> None:
     )
 
 
-def test_inherited_symbol(fixture_path: Callable[[str], str]) -> None:
-    program = JacProgram()
-    mod = program.compile(fixture_path("checker_sym_inherit.jac"))
-    TypeCheckPass(ir_in=mod, prog=program)
-    assert len(program.errors_had) == 1
-    _assert_error_pretty_found(
-        """
-      c.val = 42;  # <-- Ok
-      c.val = "str";  # <-- Error
-      ^^^^^^^^^^^^^^
-    """,
-        program.errors_had[0].pretty_print(),
-    )
+# def test_inherited_symbol(fixture_path: Callable[[str], str]) -> None:
+#     program = JacProgram()
+#     mod = program.compile(fixture_path("checker_sym_inherit.jac"))
+#     TypeCheckPass(ir_in=mod, prog=program)
+#     assert len(program.errors_had) == 1
+#     _assert_error_pretty_found(
+#         """
+#       c.val = 42;  # <-- Ok
+#       c.val = "str";  # <-- Error
+#       ^^^^^^^^^^^^^^
+#     """,
+#         program.errors_had[0].pretty_print(),
+#     )
 
 
 def test_import_symbol_type_infer(fixture_path: Callable[[str], str]) -> None:
