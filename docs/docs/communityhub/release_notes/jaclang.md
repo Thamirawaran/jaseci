@@ -10,6 +10,7 @@ This document provides a summary of new features, improvements, and bug fixes in
 - **Py2Jac Stability**: Fixed conversion of Python code with augmented assignments and nested docstrings so generated Jac no longer redeclares targets or merges docstrings into following defs.
 - **Support JS Switch Statement**: Javascript transpilation for switch statement is supported.
 - **F-String Escape Sequence Fix**: Fixed a bug where escape sequences like `\n`, `\t`, etc. inside f-strings were not being properly decoded, causing literal backslash-n to appear in output instead of actual newlines. The fix correctly decodes escape sequences for f-string literal fragments in `unitree.py`.
+- **Use Keywords as variable**: Developers can now use any jaclang keywords as variable by using escape character `<>`. Example: `<>from`.
 
 ## jaclang 0.9.3 (Latest Release)
 
