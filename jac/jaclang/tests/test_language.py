@@ -1895,3 +1895,17 @@ def test_by_operator(fixture_path: Callable[[str], str]) -> None:
     assert "by" in stdout_value.lower()
     assert "not" in stdout_value.lower()
     assert "implemented" in stdout_value.lower()
+
+
+def test_pykeyword_variables(
+    fixture_path: Callable[[str], str],
+    capture_stdout: Callable[[], AbstractContextManager[io.StringIO]],
+) -> None:
+    """Test keywords as variables."""
+    with capture_stdout() as captured_output:
+        Jac.jac_import("pykeyword_variables", base_path=fixture_path("./"))
+    stdout_value = captured_output.getvalue().split("\n")
+    assert "Bus class: Express" in stdout_value[0]
+    assert "Bus from: CityA" in stdout_value[1]
+    assert "Bus to: CityB" in stdout_value[2]
+    assert "From is: TestLocation" in stdout_value[3]
