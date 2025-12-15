@@ -997,13 +997,13 @@ class EsastGenPass(BaseAstGenPass[es.Statement]) {
             else [];
         }
 
-        jsx_in_return = False;
-        for stmt in node.body{
+        is_jsx_in_return = False;
+        for stmt in <>node.body {
             if isinstance(stmt, uni.ReturnStmt) {
                 for i in stmt.kid {
                     if isinstance(i, uni.JsxElement) {
                         print("JSX in return detected");
-                        jsx_in_return = True;
+                        is_jsx_in_return = True;
                     }
                 }
             }
@@ -1012,7 +1012,7 @@ class EsastGenPass(BaseAstGenPass[es.Statement]) {
         destructure_stmts: list[es.Statement] = [];
         destructure_props: list[es.AssignmentProperty | es.RestElement] = [];
         if isinstance(<>node.signature, uni.FuncSignature) and <>node.signature.params {
-            if jsx_in_return {
+            if is_jsx_in_return {
                 params.append(es.Identifier(name="props"));
                 for param in <>node.signature.params {
                     destructure_props.append(
@@ -1033,19 +1033,22 @@ class EsastGenPass(BaseAstGenPass[es.Statement]) {
                                 self.sync_loc(
                                     es.VariableDeclarator(
                                         id=self.sync_loc(
-                                            es.ObjectPattern(properties=destructure_props),
-                                            jac_node=node,
+                                            es.ObjectPattern(
+                                                properties=destructure_props
+                                            ),
+                                            jac_node=<>node,
                                         ),
                                         <>init=self.sync_loc(
-                                            es.Identifier(name="props"), jac_node=node
+                                            es.Identifier(name="props"),
+                                            jac_node=<>node
                                         ),
                                     ),
-                                    jac_node=node,
+                                    jac_node=<>node,
                                 )
                             ],
                             kind="const",
                         ),
-                        jac_node=node,
+                        jac_node=<>node,
                     )
                 ];
             } else {
@@ -1060,7 +1063,9 @@ class EsastGenPass(BaseAstGenPass[es.Statement]) {
         inner = self._get_body_inner(<>node);
         body_stmts = self._collect_stmt_body(inner);
         body_stmts = self._prepend_hoisted(<>node, body_stmts);
-        block = self.sync_loc(es.BlockStatement(body=destructure_stmts + body_stmts), jac_node=<>node);
+        block = self.sync_loc(
+            es.BlockStatement(body=destructure_stmts + body_stmts), jac_node=<>node
+        );
         func_id = self.sync_loc(
             es.Identifier(name=<>node.name_ref.sym_name), jac_node=<>node.name_ref
         );
