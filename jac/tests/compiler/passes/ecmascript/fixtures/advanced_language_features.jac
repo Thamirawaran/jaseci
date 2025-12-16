@@ -175,4 +175,25 @@ cl {
             "async_helper": gather_async
         };
     }
+
+    def TodoList(filteredTodos:any, toggleTodo:any, deleteTodo:any) -> any {
+        if filteredTodos.length == 0 {
+            return <div
+                style={{"padding": "20px", "textAlign": "center", "color": "#999"}}
+            >
+                No todos yet. Add one above!
+            </div>;
+        }
+
+        return <div>
+            {filteredTodos.map(
+                lambda  todo: any  -> any{ return <TodoItem
+                    key={todo._jac_id}
+                    todo={todo}
+                    toggleTodo={toggleTodo}
+                    deleteTodo={deleteTodo}
+                />; }
+            )}
+        </div>;
+    }
 }
