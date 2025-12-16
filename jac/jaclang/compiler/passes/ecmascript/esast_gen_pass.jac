@@ -1003,8 +1003,8 @@ class EsastGenPass(BaseAstGenPass[es.Statement]) {
                 if isinstance(stmt, uni.ReturnStmt) {
                     for i in stmt.kid {
                         if isinstance(i, uni.JsxElement) {
-                            print("JSX in return detected");
                             is_jsx_in_return = True;
+                            break;
                         }
                     }
                 }
