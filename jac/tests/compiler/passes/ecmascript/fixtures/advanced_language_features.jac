@@ -191,7 +191,8 @@ cl {
                     key={todo._jac_id}
                     todo={todo}
                     toggleTodo={toggleTodo}
-                    deleteTodo={deleteTodo}
+                    deleteTodo={props.deleteTodo}
+                    children={props.children}
                 />; }
             )}
         </div>;

@@ -168,6 +168,10 @@ def test_advanced_fixture_emits_expected_constructs(
     # check props transformation
     assert "function TodoList(props) {" in js_code
     assert "const {filteredTodos, toggleTodo, deleteTodo} = props;" in js_code
+    assert (
+        '"toggleTodo": toggleTodo, "deleteTodo": props.deleteTodo, "children": props.children'
+        in js_code
+    )
 
     assert_balanced_syntax(js_code, advanced_fixture)
     assert_no_jac_keywords(js_code, advanced_fixture)
