@@ -164,7 +164,7 @@ def test_advanced_fixture_emits_expected_constructs(
     ]
     for pattern in patterns:
         assert pattern in js_code
-    
+
     # check props transformation
     assert "function TodoList(props) {" in js_code
     assert "const {filteredTodos, toggleTodo, deleteTodo} = props;" in js_code

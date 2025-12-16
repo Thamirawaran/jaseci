@@ -176,7 +176,7 @@ cl {
         };
     }
 
-    def TodoList(filteredTodos:any, toggleTodo:any, deleteTodo:any) -> any {
+    def TodoList(filteredTodos: any, toggleTodo: any, deleteTodo: any) -> any {
         if filteredTodos.length == 0 {
             return <div
                 style={{"padding": "20px", "textAlign": "center", "color": "#999"}}
