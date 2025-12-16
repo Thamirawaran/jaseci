@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import keyword
 import os
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -3735,15 +3734,10 @@ class JacParser(Transform[uni.Source, uni.Module]):
             elif token.type == Tok.PYNLINE and isinstance(token.value, str):
                 token.value = token.value.replace("::py::", "")
 
-            if token.type == Tok.KWESC_NAME:
-                base = token.value[2:]
-                value = f"_{base}" if base in keyword.kwlist else base
-            else:
-                value = token.value
             ret = ret_type(
                 orig_src=self.parse_ref.ir_in,
                 name=token.type,
-                value=value,
+                value=token.value[2:] if token.type == Tok.KWESC_NAME else token.value,
                 line=token.line if token.line is not None else 0,
                 end_line=token.end_line if token.end_line is not None else 0,
                 col_start=token.column if token.column is not None else 0,
@@ -3751,14 +3745,8 @@ class JacParser(Transform[uni.Source, uni.Module]):
                 pos_start=token.start_pos if token.start_pos is not None else 0,
                 pos_end=token.end_pos if token.end_pos is not None else 0,
             )
-            if isinstance(ret, uni.Name):
-                if token.type == Tok.KWESC_NAME:
-                    ret.is_kwesc = True
-                if ret.value in keyword.kwlist:
-                    err = jl.UnexpectedInput(f"Python keyword {ret.value} used as name")
-                    err.line = ret.loc.first_line
-                    err.column = ret.loc.col_start
-                    raise err
+            if isinstance(ret, uni.Name) and token.type == Tok.KWESC_NAME:
+                ret.is_kwesc = True
             self.terminals.append(ret)
             return ret
 
