@@ -1014,7 +1014,11 @@ class EsastGenPass(BaseAstGenPass[es.Statement]) {
         destructure_stmts: list[es.Statement] = [];
         destructure_props: list[es.AssignmentProperty | es.RestElement] = [];
         if isinstance(<>node.signature, uni.FuncSignature) and <>node.signature.params {
-            if is_jsx_in_return {
+            if is_jsx_in_return
+            and not (
+                len(<>node.signature.params) == 1
+                and <>node.signature.params[0].name.sym_name == 'props'
+            ) {
                 params.append(es.Identifier(name="props"));
                 for param in <>node.signature.params {
                     destructure_props.append(
