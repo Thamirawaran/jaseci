@@ -890,6 +890,7 @@ class JacParser(Transform[uni.Source, uni.Module]):
                         | KW_ROOT
                         | KW_SUPER
                         | KW_SELF
+                        | KW_PROPS
                         | KW_HERE
                         | KW_VISITOR
             """
@@ -3698,6 +3699,7 @@ class JacParser(Transform[uni.Source, uni.Module]):
                 Tok.KW_ROOT,
                 Tok.KW_SUPER,
                 Tok.KW_SELF,
+                Tok.KW_PROPS,
                 Tok.KW_HERE,
                 Tok.KW_VISITOR,
             ]:
