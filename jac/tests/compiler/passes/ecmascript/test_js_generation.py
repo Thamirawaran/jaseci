@@ -665,3 +665,16 @@ cl def format_message(user: str, count: int) -> str {
         assert_balanced_syntax(js_code, temp_path)
     finally:
         os.unlink(temp_path)
+
+
+def test_keyword_variables(fixture_path: Callable[[str], str]) -> None:
+    """Test that the advanced fixture's f-strings generate proper template literals."""
+    advanced_fixture = "advanced_language_features.jac"
+    js_code = compile_fixture_to_js(advanced_fixture, fixture_path)
+
+    assert "function def(from, class) {" in js_code
+    for pattern in [
+        'print("From is:", from);',
+        'print("Class is:", class);',
+    ]:
+        assert pattern in js_code

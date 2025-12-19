@@ -219,4 +219,9 @@ cl {
             )}
         </div>;
     }
+
+    def <>def(<>from: str, <>class: str) -> str {
+        print("From is:", <>from);
+        print("Class is:", <>class);
+    }
 }
