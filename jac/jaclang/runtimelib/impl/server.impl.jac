@@ -532,13 +532,7 @@ impl ResponseBuilder.send_json(
     handler.send_response(status);
     handler.send_header('Content-Type', 'application/json');
     ResponseBuilder._add_cors_headers(handler);
-    config = get_config();
-    if config
-    and config.environments
-    and "production" in config.environments
-    and config.environments["production"].get("security_headers") {
-        ResponseBuilder._add_security_headers(handler);
-    }
+    ResponseBuilder._add_custom_headers(handler);
     handler.end_headers();
     handler.wfile.write(json.dumps(data).encode());
 }
@@ -552,13 +546,7 @@ impl ResponseBuilder.send_html(
     handler.send_header('Content-Type', 'text/html; charset=utf-8');
     handler.send_header('Content-Length', str(len(payload)));
     ResponseBuilder._add_cors_headers(handler);
-    config = get_config();
-    if config
-    and config.environments
-    and "production" in config.environments
-    and config.environments["production"].get("security_headers") {
-        ResponseBuilder._add_security_headers(handler);
-    }
+    ResponseBuilder._add_custom_headers(handler);
     handler.end_headers();
     handler.wfile.write(payload);
 }
@@ -573,13 +561,7 @@ impl ResponseBuilder.send_javascript(
     handler.send_header('Content-Length', str(len(payload)));
     handler.send_header('Cache-Control', 'no-cache');
     ResponseBuilder._add_cors_headers(handler);
-    config = get_config();
-    if config
-    and config.environments
-    and "production" in config.environments
-    and config.environments["production"].get("security_headers") {
-        ResponseBuilder._add_security_headers(handler);
-    }
+    ResponseBuilder._add_custom_headers(handler);
     handler.end_headers();
     handler.wfile.write(payload);
 }
@@ -592,13 +574,7 @@ impl ResponseBuilder.send_css(handler: BaseHTTPRequestHandler, css: str) -> None
     handler.send_header('Content-Length', str(len(payload)));
     handler.send_header('Cache-Control', 'no-cache');
     ResponseBuilder._add_cors_headers(handler);
-    config = get_config();
-    if config
-    and config.environments
-    and "production" in config.environments
-    and config.environments["production"].get("security_headers") {
-        ResponseBuilder._add_security_headers(handler);
-    }
+    ResponseBuilder._add_custom_headers(handler);
     handler.end_headers();
     handler.wfile.write(payload);
 }
@@ -611,9 +587,13 @@ impl ResponseBuilder._add_cors_headers(handler: BaseHTTPRequestHandler) -> None 
 }
 
 """Add security headers to response."""
-impl ResponseBuilder._add_security_headers(handler: BaseHTTPRequestHandler) -> None {
-    handler.send_header('Cross-Origin-Opener-Policy', 'same-origin');
-    handler.send_header('Cross-Origin-Embedder-Policy', 'require-corp');
+impl ResponseBuilder._add_custom_headers(handler: BaseHTTPRequestHandler) -> None {
+    config = get_config();
+    if config and config.environments and "headers" in config.environments {
+        for (header_name, header_value) in config.environments["headers"].items() {
+            handler.send_header(header_name, header_value);
+        }
+    }
 }
 
 """Create new user."""
@@ -766,13 +746,7 @@ impl JacAPIServer.create_handler -> type[BaseHTTPRequestHandler] {
         def do_OPTIONS(self: JacRequestHandler) -> None {
             self.send_response(200);
             ResponseBuilder._add_cors_headers(self);
-            config = get_config();
-            if config
-            and config.environments
-            and "production" in config.environments
-            and config.environments["production"].get("security_headers") {
-                ResponseBuilder._add_security_headers(self);
-            }
+            ResponseBuilder._add_custom_headers(self);
             self.end_headers();
         }
 
