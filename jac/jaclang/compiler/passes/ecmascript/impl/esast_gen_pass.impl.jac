@@ -2413,7 +2413,13 @@ impl EsastGenPass._collect_walker_field_names(
 
 """Get the main module of the program."""
 impl EsastGenPass.get_main_mod(self: EsastGenPass) -> uni.Module {
-    return self.prog.mod.main;
+    main_mod_path  = self.ir_in.annexable_by or self.ir_in.loc.mod_path;
+    mod = self.prog.mod.hub.get(main_mod_path);
+    if not isinstance(mod, uni.Module){
+        
+        self.log_error('Expected main module to be a Module node.');
+    }
+    return mod;
 }
 
 """Search for a symbol in the main module."""
