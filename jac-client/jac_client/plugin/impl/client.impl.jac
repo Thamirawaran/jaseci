@@ -22,7 +22,11 @@ impl JacClient.send_static_file(
         handler.send_header('Content-Length', str(len(file_content)));
         handler.send_header('Cache-Control', 'public, max-age=3600');
         ResponseBuilder._add_cors_headers(handler);
-        if get_config().environments["production"]["security_headers"] {
+        config = get_config();
+        if config
+        and config.environments
+        and "production" in config.environments
+        and config.environments["production"].get("security_headers") {
             ResponseBuilder._add_security_headers(handler);
         }
         handler.end_headers();

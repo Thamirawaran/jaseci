@@ -532,7 +532,11 @@ impl ResponseBuilder.send_json(
     handler.send_response(status);
     handler.send_header('Content-Type', 'application/json');
     ResponseBuilder._add_cors_headers(handler);
-    if get_config().environments["production"]["security_headers"] {
+    config = get_config();
+    if config
+    and config.environments
+    and "production" in config.environments
+    and config.environments["production"].get("security_headers") {
         ResponseBuilder._add_security_headers(handler);
     }
     handler.end_headers();
@@ -548,7 +552,11 @@ impl ResponseBuilder.send_html(
     handler.send_header('Content-Type', 'text/html; charset=utf-8');
     handler.send_header('Content-Length', str(len(payload)));
     ResponseBuilder._add_cors_headers(handler);
-    if get_config().environments["production"]["security_headers"] {
+    config = get_config();
+    if config
+    and config.environments
+    and "production" in config.environments
+    and config.environments["production"].get("security_headers") {
         ResponseBuilder._add_security_headers(handler);
     }
     handler.end_headers();
@@ -565,7 +573,11 @@ impl ResponseBuilder.send_javascript(
     handler.send_header('Content-Length', str(len(payload)));
     handler.send_header('Cache-Control', 'no-cache');
     ResponseBuilder._add_cors_headers(handler);
-    if get_config().environments["production"]["security_headers"] {
+    config = get_config();
+    if config
+    and config.environments
+    and "production" in config.environments
+    and config.environments["production"].get("security_headers") {
         ResponseBuilder._add_security_headers(handler);
     }
     handler.end_headers();
@@ -580,7 +592,11 @@ impl ResponseBuilder.send_css(handler: BaseHTTPRequestHandler, css: str) -> None
     handler.send_header('Content-Length', str(len(payload)));
     handler.send_header('Cache-Control', 'no-cache');
     ResponseBuilder._add_cors_headers(handler);
-    if get_config().environments["production"]["security_headers"] {
+    config = get_config();
+    if config
+    and config.environments
+    and "production" in config.environments
+    and config.environments["production"].get("security_headers") {
         ResponseBuilder._add_security_headers(handler);
     }
     handler.end_headers();
@@ -750,7 +766,11 @@ impl JacAPIServer.create_handler -> type[BaseHTTPRequestHandler] {
         def do_OPTIONS(self: JacRequestHandler) -> None {
             self.send_response(200);
             ResponseBuilder._add_cors_headers(self);
-            if get_config().environments["production"]["security_headers"] {
+            config = get_config();
+            if config
+            and config.environments
+            and "production" in config.environments
+            and config.environments["production"].get("security_headers") {
                 ResponseBuilder._add_security_headers(self);
             }
             self.end_headers();
