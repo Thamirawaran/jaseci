@@ -679,6 +679,7 @@ def test_keyword_variables(fixture_path: Callable[[str], str]) -> None:
     ]:
         assert pattern in js_code
 
+
 def test_separated_files(fixture_path: Callable[[str], str]) -> None:
     """Test features functionality with separated files."""
     advanced_fixture = "separated.jac"
@@ -686,3 +687,4 @@ def test_separated_files(fixture_path: Callable[[str], str]) -> None:
 
     # Check the spawned walker function is present
     assert "let response = await __jacSpawn(" in js_code
+    assert '__jacSpawn("create_todo", "", {"text": input.trim()});' in js_code
