@@ -1,5 +1,6 @@
-"""Serialize objects to JSON-compatible format."""
+import from jaclang.project.config { get_config }
 
+"""Serialize objects to JSON-compatible format."""
 impl JacSerializer.serialize(<>obj: object) -> JsonValue {
     import from jaclang.pycore.constructs { Archetype }
     if ((<>obj is None) or isinstance(<>obj, (str, int, float, bool))) {
@@ -531,6 +532,9 @@ impl ResponseBuilder.send_json(
     handler.send_response(status);
     handler.send_header('Content-Type', 'application/json');
     ResponseBuilder._add_cors_headers(handler);
+    if get_config().environments["production"]["security_headers"] {
+        ResponseBuilder._add_security_headers(handler);
+    }
     handler.end_headers();
     handler.wfile.write(json.dumps(data).encode());
 }
@@ -544,6 +548,9 @@ impl ResponseBuilder.send_html(
     handler.send_header('Content-Type', 'text/html; charset=utf-8');
     handler.send_header('Content-Length', str(len(payload)));
     ResponseBuilder._add_cors_headers(handler);
+    if get_config().environments["production"]["security_headers"] {
+        ResponseBuilder._add_security_headers(handler);
+    }
     handler.end_headers();
     handler.wfile.write(payload);
 }
@@ -558,6 +565,9 @@ impl ResponseBuilder.send_javascript(
     handler.send_header('Content-Length', str(len(payload)));
     handler.send_header('Cache-Control', 'no-cache');
     ResponseBuilder._add_cors_headers(handler);
+    if get_config().environments["production"]["security_headers"] {
+        ResponseBuilder._add_security_headers(handler);
+    }
     handler.end_headers();
     handler.wfile.write(payload);
 }
@@ -570,6 +580,9 @@ impl ResponseBuilder.send_css(handler: BaseHTTPRequestHandler, css: str) -> None
     handler.send_header('Content-Length', str(len(payload)));
     handler.send_header('Cache-Control', 'no-cache');
     ResponseBuilder._add_cors_headers(handler);
+    if get_config().environments["production"]["security_headers"] {
+        ResponseBuilder._add_security_headers(handler);
+    }
     handler.end_headers();
     handler.wfile.write(payload);
 }
@@ -579,6 +592,12 @@ impl ResponseBuilder._add_cors_headers(handler: BaseHTTPRequestHandler) -> None 
     handler.send_header('Access-Control-Allow-Origin', '*');
     handler.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     handler.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+}
+
+"""Add security headers to response."""
+impl ResponseBuilder._add_security_headers(handler: BaseHTTPRequestHandler) -> None {
+    handler.send_header('Cross-Origin-Opener-Policy', 'same-origin');
+    handler.send_header('Cross-Origin-Embedder-Policy', 'require-corp');
 }
 
 """Create new user."""
@@ -731,6 +750,9 @@ impl JacAPIServer.create_handler -> type[BaseHTTPRequestHandler] {
         def do_OPTIONS(self: JacRequestHandler) -> None {
             self.send_response(200);
             ResponseBuilder._add_cors_headers(self);
+            if get_config().environments["production"]["security_headers"] {
+                ResponseBuilder._add_security_headers(self);
+            }
             self.end_headers();
         }
 
