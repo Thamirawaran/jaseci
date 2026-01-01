@@ -589,8 +589,11 @@ impl ResponseBuilder._add_cors_headers(handler: BaseHTTPRequestHandler) -> None 
 """Add security headers to response."""
 impl ResponseBuilder._add_custom_headers(handler: BaseHTTPRequestHandler) -> None {
     config = get_config();
-    if config and config.environments and "headers" in config.environments {
-        for (header_name, header_value) in config.environments["headers"].items() {
+    if config
+    and config.environments
+    and "response" in config.environments
+    and "headers" in config.environments["response"] {
+        for (header_name, header_value) in config.environments["response"]["headers"].items() {
             handler.send_header(header_name, header_value);
         }
     }
