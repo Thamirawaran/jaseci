@@ -386,13 +386,6 @@ def read_file_with_encoding(file_path: str) -> str:
 
     Tries multiple encodings to handle files with different encodings.
     """
-
-    # if main file does not exist but .cl.jac exists, return empty string
-    if not os.path.exists(file_path):
-        if file_path.endswith(".jac") and os.path.exists(file_path[:-4] + ".cl.jac"):
-            return ""
-        raise OSError(f"File {file_path} does not exist.")
-
     encodings_to_try = [
         "utf-8-sig",
         "utf-8",
