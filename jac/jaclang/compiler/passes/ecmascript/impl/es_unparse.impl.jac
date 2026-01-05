@@ -313,15 +313,16 @@ impl JSCodeGenerator.gen_logical_expression(
 impl JSCodeGenerator.gen_binary_expression(
     self: JSCodeGenerator, <>node: es.BinaryExpression
 ) -> str {
+    need_parens = (es.AssignmentExpression, es.BinaryExpression);
     left = self.generate(<>node.left);
     right = self.generate(<>node.right);
-    if isinstance(<>node.left, es.AssignmentExpression) {
+    if isinstance(<>node.left, need_parens) {
         left = f"({left})";
     }
-    if isinstance(<>node.right, es.AssignmentExpression) {
+    if isinstance(<>node.right, need_parens) {
         right = f"({right})";
     }
-    return f"{left} {node.operator} {right}";
+    return f"{left} {<>node.operator} {right}";
 }
 
 """Generate update expression."""
