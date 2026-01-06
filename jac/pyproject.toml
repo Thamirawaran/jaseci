@@ -39,7 +39,7 @@ dev = [
 include = ["jaclang*"]
 
 [tool.setuptools.package-data]
-"*" = ["*.jac", "*.lark", "*.pyi", "py.typed", ".impl/*.jac", ".cl/*.jac"]
+"*" = ["*.jac", "*.impl/*.jac", "*.cl/*.jac", "*.lark", "*.pyi", "py.typed"]
 jaclang = ["sitecustomize.py"]
 
 [tool.setuptools]
