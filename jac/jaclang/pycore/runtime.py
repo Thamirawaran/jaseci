@@ -1504,14 +1504,14 @@ class JacAPIServer:
     """Jac API Server Operations - Generic interface for API server."""
 
     @staticmethod
-    def get_module_introspector(
-        module_name: str,
-        base_path: str | None = None,
-    ) -> ModuleIntrospector:
-        from jaclang.runtimelib.server import ModuleIntrospector
-
+    def render_page(
+        introspector: ModuleIntrospector,
+        function_name: str,
+        args: dict[(str, Any)],
+        username: str,
+    ) -> dict[str, Any]:
         """Get the module introspector instance."""
-        return ModuleIntrospector(module_name, base_path)
+        return introspector._render_page(function_name, args, username)
 
 
 class JacResponseBuilder:

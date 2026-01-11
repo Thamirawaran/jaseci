@@ -453,7 +453,7 @@ impl ModuleIntrospector.ensure_bundle -> str {
 }
 
 """Render HTML page for client function."""
-impl ModuleIntrospector.render_page(
+impl ModuleIntrospector._render_page(
     function_name: str, args: dict[(str, Any)], username: str
 ) -> dict[str, Any] {
     self.load();
@@ -482,6 +482,13 @@ impl ModuleIntrospector.render_page(
         function_name
     )}</title></head><body><div id="__jac_root"></div><script id="__jac_init__" type="application/json">{safe_initial_json}</script><script src="/static/client.js?hash={bundle_hash}" defer></script></body></html>';
     return {'html': page, 'bundle_hash': bundle_hash, 'bundle_code': self._bundle.code};
+}
+
+"""Render HTML page for client function."""
+impl ModuleIntrospector.render_page(
+    function_name: str, args: dict[(str, Any)], username: str
+) -> dict[str, Any] {
+    return Jac.render_page(self, function_name, args, username);
 }
 
 """Check if authentication is required for a function based on its access level.
@@ -688,7 +695,7 @@ impl ExecutionHandler.spawn_walker(
 """Initialize the API server."""
 impl JacAPIServer.postinit -> None {
     self.user_manager = UserManager(session_path=self.session_path);
-    self.introspector = Jac.get_module_introspector(self.module_name, self.base_path);
+    self.introspector = ModuleIntrospector(self.module_name, self.base_path);
     self.execution_manager = ExecutionManager(
         session_path=self.session_path, user_manager=self.user_manager
     );
