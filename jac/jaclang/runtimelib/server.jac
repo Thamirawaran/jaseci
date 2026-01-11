@@ -197,7 +197,9 @@ obj JacAPIServer {
 
     def get_client_bundle_code -> str;
     def print_endpoint_docs -> None;
-    def start -> None;
+    def _start -> None;
+    def start_server -> None;
+    def create_server(host: str) -> HTTPServer;
 }
 
 """Print comprehensive documentation for all endpoints that would be generated."""

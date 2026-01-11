@@ -1504,12 +1504,17 @@ class JacAPIServer:
     """Jac API Server Operations - Generic interface for API server."""
 
     @staticmethod
-    def get_module_introspector(
-        module_name: str,
-        base_path: str | None = None,
-    ) -> ModuleIntrospector:
-        from jaclang.runtimelib.server import ModuleIntrospector
+    def create_server(
+        apiserver: JacServer,
+        host: str,
+    ) -> Any:  # noqa: ANN401 HTTPServer or FastApiServer
+        """Create the API server instance."""
+        return apiserver.create_server(host)
 
+    @staticmethod
+    def start_server(server: JacServer) -> None:
+        """Start the API server."""
+        server._start()
         """Get the module introspector instance."""
     @staticmethod
     def render_page(

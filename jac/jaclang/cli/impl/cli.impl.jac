@@ -191,7 +191,7 @@ impl serve(
         }
     }
     try {
-        server.start();
+        server.start_server();
     } except KeyboardInterrupt {
         print('\nServer stopped.');
         mach.close();

@@ -12,7 +12,9 @@ import from .context { JScaleExecutionContext }
 import from .kubernetes.docker_impl { build_and_push_docker }
 import from .kubernetes.K8s { deploy_K8s }
 import from .kubernetes.utils { cleanup_K8s_resources }
-import from .serve { JacAPIServer }
+import from .serve { JacAPIServer, Platforms }
+import from jac_scale.config_loader { get_scale_config }
+import from fastapi.middleware.cors { CORSMiddleware }
 """Jac CLI."""
 class JacCmd {
     """Create Jac CLI cmds."""
@@ -46,90 +48,6 @@ class JacCmd {
             load_dotenv(dotenv_path);
             cleanup_K8s_resources();
         }
-        """Start a REST API server for the specified .jac file.
-
-            Executes the target module and turns all functions into authenticated REST API
-            endpoints. Function signatures are introspected to create the API interface.
-            Walkers are converted to REST APIs where their fields become the interface,
-            with an additional target_node field for spawning location.
-
-            Each user gets their own persistent root node that persists across runs.
-            Users must create an account and authenticate to access the API.
-
-            Args:
-                filename: Path to the .jac file to serve
-                session: Session identifier for persistent state (default: auto-generated)
-                port: Port to run the server on (default: 8000)
-                main: Treat the module as __main__ (default: True)
-                faux: Perform introspection and print endpoint docs without starting server (default: False)
-
-            Examples:
-                jac serve myprogram.jac
-                jac serve myprogram.jac --port 8080
-                jac serve myprogram.jac --session myapp.session
-                jac serve myprogram.jac --faux
-            """;
-        @cmd_registry.register(priority=CommandPriority.PLUGIN, source='jac-scale')
-        def serve(
-            filename: str,
-            session: str = '',
-            port: int = 8000,
-            main: bool = True,
-            faux: bool = False
-        ) -> None {
-            import from jaclang.cli.cli { proc_file_sess }
-            (base, mod, mach) = proc_file_sess(filename, session);
-            lng = filename.split('.')[-1];
-            Jac.set_base_path(base);
-            if filename.endswith(('.jac', '.py')) {
-                try {
-                    Jac.jac_import(target=mod, base_path=base, lng=lng);
-                } except Exception as e {
-                    print(f"Error loading {filename}: {e}", file=sys.stderr);
-                    mach.close();
-                    <>exit(1);
-                }
-            } elif filename.endswith('.jir') {
-                try {
-                    with open(filename, 'rb') as f {
-                        Jac.attach_program(pickle.load(f));
-                        Jac.jac_import(target=mod, base_path=base, lng=lng);
-                    }
-                } except Exception as e {
-                    print(f"Error loading {filename}: {e}", file=sys.stderr);
-                    mach.close();
-                    <>exit(1);
-                }
-            }
-            session_path = session or os.path.join(base, f"{mod}.session");
-            server = JacAPIServer(
-                module_name=mod, session_path=session_path, port=port, base_path=base
-            );
-            if faux {
-                try {
-                    server.print_endpoint_docs();
-                    mach.close();
-                    return;
-                } except Exception as e {
-                    print(
-                        f"Error generating endpoint documentation: {e}",
-                        file=sys.stderr
-                    );
-                    mach.close();
-                    <>exit(1);
-                }
-            }
-            try {
-                server.start();
-            } except KeyboardInterrupt {
-                print('\nServer stopped.');
-                mach.close();
-            } except Exception as e {
-                print(f"Server error: {e}", file=sys.stderr);
-                mach.close();
-                <>exit(1);
-            }
-        }
     }
 }
 
@@ -140,6 +58,51 @@ class JacScalePlugin {
         session: (str | None) = None, <>root: (str | None) = None
     ) -> ExecutionContext {
         return JScaleExecutionContext(session=session, <>root=<>root);
+    }
+
+    @hookimpl
+    static def create_server(apiserver: JacAPIServer, host: str,) -> Any {
+        import from jac_scale.jserver.jfast_api { JFastApiServer }
+        scale_server = JFastApiServer([]);
+        scale_server.app.add_middleware(
+            CORSMiddleware,
+            allow_origins=['*'],
+            allow_credentials=True,
+            allow_methods=['*'],
+            allow_headers=['*']
+        );
+        return scale_server;
+    }
+
+    @hookimpl
+    static def add_platform -> dict {
+        supported_platforms: dict = {};
+        # Load SSO config fresh (not from cached global) to support env var overrides at runtime
+        sso_config = get_scale_config().get_sso_config();
+        for platform in Platforms {
+            key = platform.lower();
+            platform_config = sso_config.get(key, {});
+
+            client_id = platform_config.get('client_id', '');
+            client_secret = platform_config.get('client_secret', '');
+
+            if not client_id or not client_secret {
+                continue;
+            }
+
+            supported_platforms[platform.value] = {
+                "client_id": client_id,
+                "client_secret": client_secret
+            };
+        }
+        return supported_platforms;
+    }
+
+    @hookimpl
+    static def start_server(
+        server: JacAPIServer
+    ) -> None {
+        JacAPIServer.start(server);
     }
 }
 
