@@ -60,7 +60,8 @@ if TYPE_CHECKING:
     from jaclang.pycore.program import JacProgram
     from jaclang.runtimelib.client_bundle import ClientBundle, ClientBundleBuilder
     from jaclang.runtimelib.context import ExecutionContext
-    from jaclang.runtimelib.server import ModuleIntrospector
+    from jaclang.runtimelib.server import JacAPIServer as JacServer
+    from jaclang.runtimelib.server import ModuleIntrospector, Response
 
 plugin_manager = pluggy.PluginManager("jac")
 hookspec = pluggy.HookspecMarker("jac")
@@ -1515,7 +1516,27 @@ class JacAPIServer:
     def start_server(server: JacServer) -> None:
         """Start the API server."""
         server._start()
+
+    @staticmethod
+    def add_platform() -> dict:
+        """Add platform to the API server."""
+        return {}
+
+    @staticmethod
+    def render_page_callback(jac_server: JacServer) -> Callable:
         """Get the module introspector instance."""
+        return jac_server.render_page_callback()
+
+    @staticmethod
+    def create_user(jac_server: JacServer, username: str, password: str) -> Response:
+        """Create user in the API server."""
+        return jac_server.auth_handler.create_user(username, password)
+
+    @staticmethod
+    def login(jac_server: JacServer, username: str, password: str) -> Response:
+        """Login user in the API server."""
+        return jac_server.auth_handler.login(username, password)
+
     @staticmethod
     def render_page(
         introspector: ModuleIntrospector,

@@ -711,6 +711,9 @@ impl JacAPIServer.postinit -> None {
         user_manager=self.user_manager
     );
     self.server = Jac.create_server(self, '0.0.0.0');
+    self.SUPPORTED_PLATFORMS: dict = Jac.add_platform();
+}
+
 """Create HTTP server instance."""
 impl JacAPIServer.create_server(host: str) -> HTTPServer {
     self.introspector.load();

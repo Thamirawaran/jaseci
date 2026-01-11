@@ -104,6 +104,25 @@ class JacScalePlugin {
     ) -> None {
         JacAPIServer.start(server);
     }
+
+    @hookimpl
+    static def render_page_callback(
+        jac_server: JacAPIServer
+    ) -> Callable[..., HTMLResponse] {
+        return JacAPIServer.render_page_callback(jac_server);
+    }
+
+    @hookimpl
+    static def create_user(
+        jac_server: JacAPIServer, username: str, password: str
+    ) -> JSONResponse {
+        return JacAPIServer.create_user(jac_server, username, password);
+    }
+
+    @hookimpl
+    static def login(jac_server: JacAPIServer, username: str, password: str) -> JSONResponse {
+        return JacAPIServer.login(jac_server, username, password);
+    }
 }
 
 # Pluggy's varnames() puts parameters with defaults into kwargnames, not argnames.

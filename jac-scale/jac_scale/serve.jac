@@ -40,67 +40,62 @@ class Operations(StrEnum) {
         REGISTER: str = 'register';
 }
 
-class JacAPIServer(JServer) {
+class JacAPIServer {
     static def create_jwt_token(username: str) -> str;
     static def validate_jwt_token(token: str) -> (str | None);
     static def refresh_jwt_token(token: str) -> (str | None);
-    def init(
-        self: JacAPIServer,
-        module_name: str,
-        session_path: str,
-        port: int = 8000,
-        base_path: (str | None) = None
-    ) -> None;
-
-    def login(self: JacAPIServer, username: str, password: str) -> JSONResponse;
-    def register_login_endpoint(self: JacAPIServer) -> None;
-    def create_user(self: JacAPIServer, username: str, password: str) -> JSONResponse;
-    def refresh_token(self: JacAPIServer, token: (str | None) = None) -> JSONResponse;
-    def register_create_user_endpoint(self: JacAPIServer) -> None;
-    def register_refresh_token_endpoint(self: JacAPIServer) -> None;
-    def get_sso(
-        self: JacAPIServer, platform: str, operation: str
-    ) -> (GoogleSSO | None);
-
-    async def sso_initiate(
-        self: JacAPIServer, platform: str, operation: str
-    ) -> Response;
-
-    async def sso_callback(
-        self: JacAPIServer, request: Request, platform: str, operation: str
+    static def login(jac_server: Any, username: str, password: str) -> JSONResponse;
+    static def register_login_endpoint(jac_server: Any) -> None;
+    static def create_user(
+        jac_server: Any, username: str, password: str
     ) -> JSONResponse;
 
-    def register_sso_endpoints(self: JacAPIServer) -> None;
-    def create_walker_callback(
-        self: JacAPIServer, walker_name: str, has_node_param: bool = False
+    static def refresh_token(token: (str | None) = None) -> JSONResponse;
+    static def register_create_user_endpoint(jac_server: Any) -> None;
+    static def register_refresh_token_endpoint(jac_server: Any) -> None;
+    static def get_sso(
+        jac_server: Any, platform: str, operation: str
+    ) -> (GoogleSSO | None);
+
+    async static def sso_initiate(
+        jac_server: Any, platform: str, operation: str
+    ) -> Response;
+
+    async static def sso_callback(
+        jac_server: Any, request: Request, platform: str, operation: str
+    ) -> JSONResponse;
+
+    static def register_sso_endpoints(jac_server: Any) -> None;
+    static def create_walker_callback(
+        jac_server: Any, walker_name: str, has_node_param: bool = False
     ) -> Callable[..., dict[(str, JsonValue)]];
 
-    def create_walker_parameters(
-        self: JacAPIServer, walker_name: str, invoke_on_root: bool
+    static def create_walker_parameters(
+        jac_server: Any, walker_name: str, invoke_on_root: bool
     ) -> list[APIParameter];
 
-    def register_walkers_endpoints(self: JacAPIServer) -> None;
-    def create_function_callback(
-        self: JacAPIServer, func_name: str
+    static def register_walkers_endpoints(jac_server: Any) -> None;
+    static def create_function_callback(
+        jac_server: Any, func_name: str
     ) -> Callable[..., dict[(str, JsonValue)]];
 
-    def create_function_parameters(
-        self: JacAPIServer, func_name: str
+    static def create_function_parameters(
+        jac_server: Any, func_name: str
     ) -> list[APIParameter];
 
-    def register_functions_endpoints(self: JacAPIServer) -> None;
-    def render_page_callback(self: JacAPIServer) -> Callable[..., HTMLResponse];
-    def render_base_route_callback(
-        self: JacAPIServer, app_name: str
+    static def register_functions_endpoints(jac_server: Any) -> None;
+    static def render_page_callback(jac_server: Any) -> Callable[..., HTMLResponse];
+    static def render_base_route_callback(
+        jac_server: Any, app_name: str
     ) -> Callable[..., HTMLResponse];
 
-    def register_page_endpoint(self: JacAPIServer) -> None;
-    def serve_client_js_callback(self: JacAPIServer) -> Callable[..., Response];
-    def register_client_js_endpoint(self: JacAPIServer) -> None;
-    def register_static_file_endpoint(self: JacAPIServer) -> None;
-    def serve_static_file(self: JacAPIServer, file_path: str) -> Response;
-    def register_root_asset_endpoint(self: JacAPIServer) -> None;
-    def serve_root_asset(self: JacAPIServer, file_path: str) -> Response;
-    def _configure_openapi_security(self: JacAPIServer) -> None;
-    def start(self: JacAPIServer) -> None;
+    static def register_page_endpoint(jac_server: Any) -> None;
+    static def serve_client_js_callback(jac_server: Any) -> Callable[..., Response];
+    static def register_client_js_endpoint(jac_server: Any) -> None;
+    static def register_static_file_endpoint(jac_server: Any) -> None;
+    static def serve_static_file(file_path: str) -> Response;
+    static def register_root_asset_endpoint(jac_server: Any) -> None;
+    static def serve_root_asset(file_path: str) -> Response;
+    static def _configure_openapi_security(jac_server: Any) -> None;
+    static def start(jac_server: Any) -> None;
 }

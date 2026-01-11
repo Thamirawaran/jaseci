@@ -200,6 +200,17 @@ obj JacAPIServer {
     def _start -> None;
     def start_server -> None;
     def create_server(host: str) -> HTTPServer;
+    def render_page_callback -> Callable[..., HTMLResponse] {
+        return Jac.render_page_callback(self);
+    }
+
+    def create_user(username: str, password: str) -> JSONResponse {
+        return Jac.create_user(self, username, password);
+    }
+
+    def login(username: str, password: str) -> JSONResponse {
+        return Jac.login(self, username, password);
+    }
 }
 
 """Print comprehensive documentation for all endpoints that would be generated."""
