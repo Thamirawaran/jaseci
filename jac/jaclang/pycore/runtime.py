@@ -1511,7 +1511,15 @@ class JacAPIServer:
         from jaclang.runtimelib.server import ModuleIntrospector
 
         """Get the module introspector instance."""
-        return ModuleIntrospector(module_name, base_path)
+    @staticmethod
+    def render_page(
+        introspector: ModuleIntrospector,
+        function_name: str,
+        args: dict[(str, Any)],
+        username: str,
+    ) -> dict[str, Any]:
+        """Get the module introspector instance."""
+        return introspector._render_page(function_name, args, username)
 
 
 class JacResponseBuilder:
