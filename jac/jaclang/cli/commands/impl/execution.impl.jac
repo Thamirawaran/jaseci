@@ -186,13 +186,22 @@ impl start(
     if faux {
         try {
             server.print_endpoint_docs();
-            mach.close();
-            return 0;
         } except Exception as e {
             print(f"Error generating endpoint documentation: {e}", file=sys.stderr);
+            # Clean up server socket before exiting
+            if server?.server and server.server {
+                server.server.server_close();
+            }
             mach.close();
             return 1;
+        } finally {
+            # Properly close the HTTP server socket
+            if server?.server and server.server {
+                server.server.server_close();
+            }
         }
+        mach.close();
+        return 0;
     }
     try {
         server.start();
