@@ -183,6 +183,7 @@ def test_server_startup(littlex_server) -> None:
     assert "message" in result
     assert "endpoints" in result
     print("✓ Server startup test passed")
+    littlex_server["server"].server.server_close()
 
 
 def test_user_creation_and_login(littlex_server) -> None:
@@ -208,6 +209,7 @@ def test_user_creation_and_login(littlex_server) -> None:
     # Test wrong password
     login_fail = littlex_server["request"]("POST", "/user/login", {"username": "bob", "password": "wrongpass"})
     assert "error" in login_fail
+    littlex_server["server"].server.server_close()
 
     print("✓ User creation and login test passed")
 
@@ -244,6 +246,7 @@ def test_profile_creation_and_update(littlex_server) -> None:
         token=bob_token,
     )
     assert "result" in update_result2
+    littlex_server["server"].server.server_close()
 
     print("✓ Profile creation and update test passed")
 
@@ -279,6 +282,7 @@ def test_follow_unfollow_users(littlex_server) -> None:
 
     # This test demonstrates the follow functionality
     # In a real implementation, we would need to pass the target profile ID
+    littlex_server["server"].server.server_close()
     print("✓ Follow/unfollow test structure created")
 
 
@@ -322,6 +326,7 @@ def test_create_and_list_tweets(littlex_server) -> None:
         token=alice_token,
     )
     assert "result" in tweet3 or "reports" in tweet3
+    littlex_server["server"].server.server_close()
 
     print("✓ Tweet creation test passed")
 
@@ -359,6 +364,7 @@ def test_like_and_unlike_tweets(littlex_server) -> None:
         token=alice_token,
     )
     assert "result" in tweet_result or "reports" in tweet_result
+    littlex_server["server"].server.server_close()
 
     print("✓ Like/unlike tweet test structure created")
 
@@ -396,6 +402,7 @@ def test_comment_on_tweets(littlex_server) -> None:
         token=alice_token,
     )
     assert "result" in tweet_result or "reports" in tweet_result
+    littlex_server["server"].server.server_close()
 
     print("✓ Comment on tweet test structure created")
 
@@ -464,6 +471,7 @@ def test_multi_user_social_activity(littlex_server) -> None:
             walker_result = feed_result["result"]
             if "results" in walker_result:
                 print(f"  - Feed loaded with {len(walker_result['results'])} tweets")
+    littlex_server["server"].server.server_close()
 
     print("✓ Multi-user social activity test passed")
     print(f"  - Created {len(users)} users")
@@ -497,6 +505,7 @@ def test_load_all_user_profiles(littlex_server) -> None:
         {},
         token=littlex_server["users"]["alice"]["token"],
     )
+    littlex_server["server"].server.server_close()
 
     if "result" in profiles_result:
         print("✓ Load all user profiles test passed")
@@ -554,6 +563,7 @@ def test_user_isolation(littlex_server) -> None:
 
     # Verify different root IDs
     assert littlex_server["users"]["alice"]["root_id"] != littlex_server["users"]["bob"]["root_id"]
+    littlex_server["server"].server.server_close()
 
     print("✓ User isolation test passed")
 
@@ -591,6 +601,7 @@ def test_data_persistence(littlex_server) -> None:
         littlex_server["httpd"].shutdown()
         littlex_server["httpd"].server_close()
         littlex_server["httpd"] = None
+    littlex_server["server"].server.server_close()
 
     if littlex_server["server_thread"] and littlex_server["server_thread"].is_alive():
         littlex_server["server_thread"].join(timeout=2)
@@ -605,6 +616,7 @@ def test_data_persistence(littlex_server) -> None:
 
     assert "token" in login_result
     assert login_result["root_id"] == alice_root
+    littlex_server["server"].server.server_close()
 
     print("✓ Data persistence test passed")
 
