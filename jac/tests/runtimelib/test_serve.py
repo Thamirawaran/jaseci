@@ -48,7 +48,6 @@ class ServerFixture:
         """Initialize server fixture."""
         self.server: JacAPIServer | None = None
         self.server_thread: threading.Thread | None = None
-        self.httpd: HTTPServer | None = None
         try:
             self.port = get_free_port()
         except PermissionError:
@@ -83,8 +82,8 @@ class ServerFixture:
             try:
                 self.server.load_module()
                 handler_class = self.server.create_handler()
-                self.httpd = HTTPServer(("127.0.0.1", self.port), handler_class)
-                self.httpd.serve_forever()
+                self.server.server = HTTPServer(("127.0.0.1", self.port), handler_class)
+                self.server.server.serve_forever()
             except Exception:
                 pass
 
@@ -151,10 +150,10 @@ class ServerFixture:
                 self.server.user_manager.close()
 
         # Stop server if running
-        if self.httpd:
+        if self.server.server:
             try:
-                self.httpd.shutdown()
-                self.httpd.server_close()
+                self.server.server.shutdown()
+                self.server.server.server_close()
             except Exception:
                 pass
 
@@ -1301,7 +1300,6 @@ class ConfiguredServerFixture:
 
         self.server: JacAPIServer | None = None
         self.server_thread: threading.Thread | None = None
-        self.httpd: HTTPServer | None = None
         try:
             self.port = get_free_port()
         except PermissionError:
@@ -1362,8 +1360,8 @@ class ConfiguredServerFixture:
                 try:
                     self.server.load_module()
                     handler_class = self.server.create_handler()
-                    self.httpd = HTTPServer(("127.0.0.1", self.port), handler_class)
-                    self.httpd.serve_forever()
+                    self.server.server = HTTPServer(("127.0.0.1", self.port), handler_class)
+                    self.server.server.serve_forever()
                 except Exception:
                     pass
 
@@ -1435,9 +1433,9 @@ class ConfiguredServerFixture:
         """Stop server and cleanup."""
         from jaclang.project.config import set_config
 
-        if self.httpd:
-            self.httpd.shutdown()
-            self.httpd.server_close()
+        if self.server.server:
+            self.server.server.shutdown()
+            self.server.server.server_close()
         if self.server_thread and self.server_thread.is_alive():
             self.server_thread.join(timeout=2)
         set_config(None)
