@@ -164,14 +164,6 @@ class ServerFixture:
         if self.server_thread and self.server_thread.is_alive():
             self.server_thread.join(timeout=2)
 
-        # Give a moment for resources to be released
-        time.sleep(0.1)
-
-        # Force garbage collection to cleanup sockets
-        import gc
-
-        gc.collect()
-
         # Clean up session files
         del_session(self.session_file)
 
@@ -942,9 +934,7 @@ def test_default_page_is_csr(server_fixture: ServerFixture) -> None:
 
 def test_faux_flag_prints_endpoint_docs(server_fixture: ServerFixture) -> None:
     """Test that --faux flag prints endpoint documentation without starting server."""
-    import gc
     import io
-    import time
     from contextlib import redirect_stdout
 
     # Capture stdout
@@ -962,10 +952,6 @@ def test_faux_flag_prints_endpoint_docs(server_fixture: ServerFixture) -> None:
             )
     except SystemExit:
         pass  # start() may call exit() in some error cases
-    finally:
-        # Give time for server socket to close and force garbage collection
-        time.sleep(0.1)
-        gc.collect()
 
     output = captured_output.getvalue()
 
@@ -998,12 +984,10 @@ def test_faux_flag_prints_endpoint_docs(server_fixture: ServerFixture) -> None:
 
 def test_faux_flag_with_littlex_example(server_fixture: ServerFixture) -> None:
     """Test that --faux flag correctly identifies functions, walkers, and endpoints in littleX example."""
-    import gc
     import io
 
     # Get the absolute path to littleX file
     import os
-    import time
     from contextlib import redirect_stdout
 
     littlex_path = os.path.abspath(
@@ -1032,10 +1016,6 @@ def test_faux_flag_with_littlex_example(server_fixture: ServerFixture) -> None:
             )
     except SystemExit:
         pass  # start() may call exit() in some error cases
-    finally:
-        # Give time for server socket to close and force garbage collection
-        time.sleep(0.1)
-        gc.collect()
 
     output = captured_output.getvalue()
 
