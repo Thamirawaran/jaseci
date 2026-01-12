@@ -6,11 +6,13 @@ import from jaclang.cli.registry { get_registry }
 import from jaclang.cli.command { Arg, ArgKind, CommandPriority, HookContext }
 import from jaclang.pycore.runtime { hookimpl, plugin_manager }
 import from jaclang.runtimelib.context { ExecutionContext }
+import from jaclang.runtimelib.server { JacAPIServer as JacServer }
 import from .context { JScaleExecutionContext }
 import from .kubernetes.docker_impl { build_and_push_docker }
 import from .kubernetes.K8s { deploy_K8s }
 import from .kubernetes.utils { cleanup_K8s_resources }
 import from .serve { JacAPIServer }
+import from .jserver.jfast_api { JFastApiServer }
 
 """Pre-hook for jac start command to handle --scale flag."""
 def _scale_pre_hook(context: HookContext) -> None {
@@ -104,6 +106,14 @@ class JacScalePlugin {
         session: (str | None) = None, <>root: (str | None) = None
     ) -> ExecutionContext {
         return JScaleExecutionContext(session=session, <>root=<>root);
+    }
+
+    """Create the API server instance."""
+    @hookimpl
+    static def create_server(
+        jac_server: JacServer, host: str, port: int
+    ) -> JFastApiServer {
+        return JFastApiServer([]);
     }
 
     """Provide jac-scale's enhanced JacAPIServer class."""
