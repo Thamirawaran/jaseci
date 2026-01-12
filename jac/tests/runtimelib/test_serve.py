@@ -164,6 +164,14 @@ class ServerFixture:
         if self.server_thread and self.server_thread.is_alive():
             self.server_thread.join(timeout=2)
 
+        # Give a moment for resources to be released
+        time.sleep(0.1)
+
+        # Force garbage collection to cleanup sockets
+        import gc
+
+        gc.collect()
+
         # Clean up session files
         del_session(self.session_file)
 
@@ -1462,6 +1470,9 @@ class ConfiguredServerFixture:
         if self.server_thread and self.server_thread.is_alive():
             self.server_thread.join(timeout=2)
         set_config(None)
+
+        # Give a moment for resources to be released before cleaning up session
+        time.sleep(0.1)
         del_session(self.session_file)
 
 
