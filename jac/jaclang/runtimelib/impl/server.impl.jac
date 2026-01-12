@@ -453,38 +453,6 @@ impl ModuleIntrospector.ensure_bundle -> str {
 }
 
 """Render HTML page for client function."""
-impl ModuleIntrospector._render_page(
-    function_name: str, args: dict[(str, Any)], username: str
-) -> dict[str, Any] {
-    self.load();
-    available_exports = (
-        <>set(self._client_manifest.get('exports', []))
-        or <>set(self.get_client_functions().keys())
-    );
-    if (function_name not in available_exports) {
-        raise ValueError(f"Client function '{function_name}' not found") ;
-    }
-    bundle_hash = self.ensure_bundle();
-    arg_order = <>list(self._client_manifest.get('params', {}).get(function_name, []));
-    globals_payload = {
-        name: JacSerializer.serialize(value)
-        for (name, value) in self._collect_client_globals().items()
-    };
-    initial_state = {
-        'module': self._module.__name__ if self._module else self.module_name,
-        'function': function_name,
-        'args': {key: JacSerializer.serialize(value) for (key, value) in args.items()},
-        'globals': globals_payload,
-        'argOrder': arg_order
-    };
-    safe_initial_json = json.dumps(initial_state).replace('</', '<\\/');
-    page = f'<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><title>{html.escape(
-        function_name
-    )}</title></head><body><div id="__jac_root"></div><script id="__jac_init__" type="application/json">{safe_initial_json}</script><script src="/static/client.js?hash={bundle_hash}" defer></script></body></html>';
-    return {'html': page, 'bundle_hash': bundle_hash, 'bundle_code': self._bundle.code};
-}
-
-"""Render HTML page for client function."""
 impl ModuleIntrospector.render_page(
     function_name: str, args: dict[(str, Any)], username: str
 ) -> dict[str, Any] {
