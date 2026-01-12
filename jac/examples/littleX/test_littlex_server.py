@@ -174,13 +174,6 @@ def littlex_server():
     if server_data["server_thread"] and server_data["server_thread"].is_alive():
         server_data["server_thread"].join(timeout=2)
 
-    # Give a moment for resources to be released
-    time.sleep(0.1)
-
-    # Force garbage collection to cleanup sockets
-    import gc
-    gc.collect()
-
     # Clean up session files
     _del_session(server_data["session_file"])
 
