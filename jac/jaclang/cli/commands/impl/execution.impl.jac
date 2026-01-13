@@ -188,14 +188,10 @@ impl start(
             server.print_endpoint_docs();
         } except Exception as e {
             print(f"Error generating endpoint documentation: {e}", file=sys.stderr);
-            # Clean up server socket before exiting
-            if server?.server and server.server {
-                server.server.server_close();
-            }
             mach.close();
             return 1;
         } finally {
-            # Properly close the HTTP server socket
+            # Properly close the HTTP server socket (always executed)
             if server?.server and server.server {
                 server.server.server_close();
             }
