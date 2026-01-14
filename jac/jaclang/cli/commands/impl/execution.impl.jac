@@ -316,9 +316,7 @@ def _check_watchdog_available -> bool {
         try {
             import watchdog;
             return True;
-        } except ImportError {
-            pass;
-        } finally {
+        } except ImportError { } finally {
             sys.path = original_path;
         }
     }
