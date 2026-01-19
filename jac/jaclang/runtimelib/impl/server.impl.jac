@@ -256,6 +256,7 @@ impl ExecutionManager.spawn_walker(
     walker_cls: type[WalkerArchetype], fields: dict[(str, Any)], username: str
 ) -> dict[str, JsonValue] {
     import from jaclang.pycore.constructs { NodeArchetype }
+    import from inspect { iscoroutine }
     root_id = self.user_manager.get_root_id(username);
     if not root_id {
         return {'error': 'User not found'};
@@ -275,7 +276,11 @@ impl ExecutionManager.spawn_walker(
         } else {
             target_node = ctx.get_root();
         }
-        Jac.spawn(<>walker, target_node);
+        spawn_result = Jac.spawn(<>walker, target_node);
+        # Handle async walkers - await the coroutine if spawn returns one
+        if iscoroutine(spawn_result) {
+            await spawn_result;
+        }
         Jac.commit();  # Persist changes
         return {
             'result': JacSerializer.serialize(<>walker),
@@ -954,7 +959,7 @@ impl ExecutionHandler.spawn_walker(
             meta=Meta(extra={'http_status': 404})
         );
     }
-    result = self.execution_manager.spawn_walker(walkers[name], fields, username);
+    result = await self.execution_manager.spawn_walker(walkers[name], fields, username);
     return TransportResponse.success(
         data=result, meta=Meta(extra={'http_status': 200})
     );
@@ -1384,9 +1389,10 @@ impl JacAPIServer.create_handler -> type[BaseHTTPRequestHandler] {
                     }
                 }
                 fields = data | {'_jac_spawn_node': node_id};
-                response = server.execution_handler.spawn_walker(
+                import asyncio;
+                response = asyncio.run(server.execution_handler.spawn_walker(
                     name, fields, username
-                );
+                ));
                 self._send_response(response);
             } else {
                 Jac.send_json(self, 404, {'error': 'Not found'});
