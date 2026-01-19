@@ -647,7 +647,9 @@ impl JacAPIServer.create_walker_callback(
 ) -> Callable[..., TransportResponse] {
     import from jaclang.runtimelib.transport { TransportResponse, Meta }
     requires_auth = self.introspector.is_auth_required_for_walker(walker_name);
-    async def callback(node: (str | None) = None, **kwargs: JsonValue) -> TransportResponse {
+    async def callback(
+        node: (str | None) = None, **kwargs: JsonValue
+    ) -> TransportResponse {
         username: (str | None) = None;
         if requires_auth {
             authorization = kwargs.pop('Authorization', None);

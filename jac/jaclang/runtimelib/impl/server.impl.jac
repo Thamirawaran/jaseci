@@ -1454,9 +1454,9 @@ impl JacAPIServer.create_handler -> type[BaseHTTPRequestHandler] {
                 }
                 fields = data | {'_jac_spawn_node': node_id};
                 import asyncio;
-                response = asyncio.run(server.execution_handler.spawn_walker(
-                    name, fields, username
-                ));
+                response = asyncio.run(
+                    server.execution_handler.spawn_walker(name, fields, username)
+                );
                 self._send_response(response);
             } else {
                 Jac.send_json(self, 404, {'error': 'Not found'});
