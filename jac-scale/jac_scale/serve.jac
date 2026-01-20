@@ -31,14 +31,9 @@ glob _jwt_config = get_scale_config().get_jwt_config(),
      JWT_EXP_DELTA_DAYS = _jwt_config['exp_delta_days'],
      SSO_HOST = _sso_config['host'];
 
-class Platforms(StrEnum) {
-    has GOOGLE: str = 'google';
-}
+enum Platforms ( StrEnum ) { GOOGLE = 'google' }
 
-class Operations(StrEnum) {
-    has LOGIN: str = 'login',
-        REGISTER: str = 'register';
-}
+enum Operations ( StrEnum ) { LOGIN = 'login', REGISTER = 'register' }
 
 class JacAPIServer(JServer) {
     # HMR (Hot Module Replacement) support fields
