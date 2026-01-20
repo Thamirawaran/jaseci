@@ -141,7 +141,7 @@ impl JSCodeGenerator.gen_super(<>node: es.Super) -> str {
 
 """Generate spread element."""
 impl JSCodeGenerator.gen_spread_element(<>node: es.SpreadElement) -> str {
-    return f"...{self.generate(node.argument)}";
+    return f"...{self.generate(<>node.argument)}";
 }
 
 """Generate tagged template expression."""
@@ -165,7 +165,7 @@ impl JSCodeGenerator.gen_template_literal(<>node: es.TemplateLiteral) -> str {
     for (idx, quasi) in enumerate(<>node.quasis) {
         parts.append(self.generate(quasi));
         if (idx < len(<>node.expressions)) {
-            parts.append(f"${{{self.generate(node.expressions[idx])}}}");
+            parts.append(f"${{{self.generate(<>node.expressions[idx])}}}");
         }
     }
     return f"`{''.join(parts)}`";
@@ -173,14 +173,14 @@ impl JSCodeGenerator.gen_template_literal(<>node: es.TemplateLiteral) -> str {
 
 """Generate await expression."""
 impl JSCodeGenerator.gen_await_expression(<>node: es.AwaitExpression) -> str {
-    return f"await {self.generate(node.argument)}";
+    return f"await {self.generate(<>node.argument)}";
 }
 
 """Generate yield expression."""
 impl JSCodeGenerator.gen_yield_expression(<>node: es.YieldExpression) -> str {
     delegate = '*' if <>node.delegate else '';
     if <>node.argument {
-        return f"yield{delegate} {self.generate(node.argument)}";
+        return f"yield{delegate} {self.generate(<>node.argument)}";
     }
     return f"yield{delegate}";
 }
