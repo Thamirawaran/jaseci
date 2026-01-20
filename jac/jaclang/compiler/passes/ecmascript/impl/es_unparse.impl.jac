@@ -19,7 +19,7 @@ impl JSCodeGenerator.gen_export_all_declaration(<>node: es.ExportAllDeclaration)
 impl JSCodeGenerator.gen_export_default_declaration(
     <>node: es.ExportDefaultDeclaration
 ) -> str {
-    return f"{self.indent()}export default {self.generate(node.declaration)};";
+    return f"{self.indent()}export default {self.generate(<>node.declaration)}";
 }
 
 """Generate export specifier."""
@@ -37,7 +37,7 @@ impl JSCodeGenerator.gen_export_named_declaration(
     <>node: es.ExportNamedDeclaration
 ) -> str {
     if <>node.declaration {
-        return f"{self.indent()}export {self.generate(node.declaration).lstrip()}";
+        return f"{self.indent()}export {self.generate(<>node.declaration).lstrip()}";
     }
     specs = ', '.join(self.generate(s) for s in <>node.specifiers);
     if <>node.source {
@@ -51,7 +51,7 @@ impl JSCodeGenerator.gen_export_named_declaration(
 impl JSCodeGenerator.gen_import_namespace_specifier(
     <>node: es.ImportNamespaceSpecifier
 ) -> str {
-    return f"* as {self.generate(node.local)}";
+    return f"* as {self.generate(<>node.local)}";
 }
 
 """Generate import default specifier."""
@@ -105,7 +105,7 @@ impl JSCodeGenerator.gen_import_declaration(<>node: es.ImportDeclaration) -> str
 
 """Generate rest element."""
 impl JSCodeGenerator.gen_rest_element(<>node: es.RestElement) -> str {
-    return f"...{self.generate(node.argument)}";
+    return f"...{self.generate(<>node.argument)}";
 }
 
 """Generate assignment pattern."""
