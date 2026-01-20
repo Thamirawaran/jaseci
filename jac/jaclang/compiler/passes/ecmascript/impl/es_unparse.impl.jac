@@ -255,14 +255,14 @@ impl JSCodeGenerator.gen_member_expression(<>node: es.MemberExpression) -> str {
 impl JSCodeGenerator.gen_assignment_expression(<>node: es.AssignmentExpression) -> str {
     left = self.generate(<>node.left);
     right = self.generate(<>node.right);
-    return f"{left} {node.operator} {right}";
+    return f"{left} {<>node.operator} {right}";
 }
 
 """Generate logical expression."""
 impl JSCodeGenerator.gen_logical_expression(<>node: es.LogicalExpression) -> str {
     left = self.generate(<>node.left);
     right = self.generate(<>node.right);
-    return f"{left} {node.operator} {right}";
+    return f"{left} {<>node.operator} {right}";
 }
 
 """Generate binary expression."""
@@ -282,9 +282,9 @@ impl JSCodeGenerator.gen_binary_expression(<>node: es.BinaryExpression) -> str {
 impl JSCodeGenerator.gen_update_expression(<>node: es.UpdateExpression) -> str {
     arg = self.generate(<>node.argument);
     if <>node.prefix {
-        return f"{node.operator}{arg}";
+        return f"{<>node.operator}{arg}";
     } else {
-        return f"{arg}{node.operator}";
+        return f"{arg}{<>node.operator}";
     }
 }
 
@@ -293,11 +293,11 @@ impl JSCodeGenerator.gen_unary_expression(<>node: es.UnaryExpression) -> str {
     arg = self.generate(<>node.argument);
     if <>node.prefix {
         if (<>node.operator in ('typeof', 'void', 'delete')) {
-            return f"{node.operator} {arg}";
+            return f"{<>node.operator} {arg}";
         }
-        return f"{node.operator}{arg}";
+        return f"{<>node.operator}{arg}";
     } else {
-        return f"{arg}{node.operator}";
+        return f"{arg}{<>node.operator}";
     }
 }
 
