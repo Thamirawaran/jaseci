@@ -527,13 +527,13 @@ impl JSCodeGenerator.gen_try_statement(<>node: es.TryStatement) -> str {
 
 """Generate throw statement."""
 impl JSCodeGenerator.gen_throw_statement(<>node: es.ThrowStatement) -> str {
-    return f"{self.indent()}throw {self.generate(node.argument)};";
+    return f"{self.indent()}throw {self.generate(<>node.argument)};";
 }
 
 """Generate continue statement."""
 impl JSCodeGenerator.gen_continue_statement(<>node: es.ContinueStatement) -> str {
     if <>node.label {
-        return f"{self.indent()}continue {self.generate(node.label)};";
+        return f"{self.indent()}continue {self.generate(<>node.label)};";
     }
     return f"{self.indent()}continue;";
 }
@@ -541,7 +541,7 @@ impl JSCodeGenerator.gen_continue_statement(<>node: es.ContinueStatement) -> str
 """Generate break statement."""
 impl JSCodeGenerator.gen_break_statement(<>node: es.BreakStatement) -> str {
     if <>node.label {
-        return f"{self.indent()}break {self.generate(node.label)};";
+        return f"{self.indent()}break {self.generate(<>node.label)};";
     }
     return f"{self.indent()}break;";
 }
@@ -553,7 +553,7 @@ impl JSCodeGenerator.gen_for_of_statement(<>node: es.ForOfStatement) -> str {
         declarators = ', '.join(
             self.generate(decl) for decl in <>node.left.declarations
         );
-        left = f"{node.left.kind} {declarators}";
+        left = f"{<>node.left.kind} {declarators}";
     } else {
         left = self.generate(<>node.left);
     }
@@ -607,9 +607,9 @@ impl JSCodeGenerator.gen_if_statement(<>node: es.IfStatement) -> str {
     result = f"{self.indent()}if ({test}) {consequent}";
     if <>node.alternate {
         if isinstance(<>node.alternate, es.IfStatement) {
-            result += f" else {self.generate(node.alternate).lstrip()}";
+            result += f" else {self.generate(<>node.alternate).lstrip()}";
         } else {
-            result += f" else {self.generate(node.alternate)}";
+            result += f" else {self.generate(<>node.alternate)}";
         }
     }
     return result;
@@ -618,7 +618,7 @@ impl JSCodeGenerator.gen_if_statement(<>node: es.IfStatement) -> str {
 """Generate return statement."""
 impl JSCodeGenerator.gen_return_statement(<>node: es.ReturnStatement) -> str {
     if <>node.argument {
-        return f"{self.indent()}return {self.generate(node.argument)};";
+        return f"{self.indent()}return {self.generate(<>node.argument)};";
     }
     return f"{self.indent()}return;";
 }
