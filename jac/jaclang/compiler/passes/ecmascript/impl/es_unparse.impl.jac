@@ -372,7 +372,7 @@ impl JSCodeGenerator.gen_literal(<>node: es.Literal) -> str {
         return <>node.raw;
     }
     if isinstance(<>node.value, str) {
-        return f'"{node.value}"';
+        return f'"{<>node.value}"';
     } elif (<>node.value is None) {
         return 'null';
     } elif isinstance(<>node.value, bool) {
@@ -384,7 +384,7 @@ impl JSCodeGenerator.gen_literal(<>node: es.Literal) -> str {
 
 """Generate private identifier."""
 impl JSCodeGenerator.gen_private_identifier(<>node: es.PrivateIdentifier) -> str {
-    return f"\#{node.name}";
+    return f"\#{<>node.name}";
 }
 
 """Generate identifier."""
@@ -405,7 +405,7 @@ impl JSCodeGenerator.gen_property_definition(<>node: es.PropertyDefinition) -> s
     if <>node.computed {
         key = f"[{key}]";
     }
-    value = f" = {self.generate(node.value)}" if <>node.value else '';
+    value = f" = {self.generate(<>node.value)}" if <>node.value else '';
     return f"{self.indent()}{static_str}{key}{value};";
 }
 
