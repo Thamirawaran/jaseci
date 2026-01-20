@@ -641,7 +641,7 @@ impl JSCodeGenerator.gen_block_statement(<>node: es.BlockStatement) -> str {
 
 """Generate expression statement."""
 impl JSCodeGenerator.gen_expression_statement(<>node: es.ExpressionStatement) -> str {
-    return f"{self.indent()}{self.generate(node.expression)};";
+    return f"{self.indent()}{self.generate(<>node.expression)};";
 }
 
 """Generate program."""
@@ -655,12 +655,12 @@ impl JSCodeGenerator.generate(<>node: (es.Node | None)) -> str {
     if (<>node is None) {
         return '';
     }
-    method_name = f"gen_{pascal_to_snake(node.type)}";
+    method_name = f"gen_{pascal_to_snake(<>node.type)}";
     method = getattr(self, method_name, None);
     if method {
         return method(<>node);
     } else {
-        return f"/* Unsupported node type: {node.type} */";
+        return f"/* Unsupported node type: {<>node.type} */";
     }
 }
 
