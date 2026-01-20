@@ -466,7 +466,7 @@ impl JSCodeGenerator.gen_class_declaration(<>node: es.ClassDeclaration) -> str {
 impl JSCodeGenerator.gen_variable_declarator(<>node: es.VariableDeclarator) -> str {
     id_str = self.generate(<>node.id);
     if <>node.<>init {
-        return f"{id_str} = {self.generate(node.<>init)}";
+        return f"{id_str} = {self.generate(<>node.<>init)}";
     }
     return id_str;
 }
@@ -474,7 +474,7 @@ impl JSCodeGenerator.gen_variable_declarator(<>node: es.VariableDeclarator) -> s
 """Generate variable declaration."""
 impl JSCodeGenerator.gen_variable_declaration(<>node: es.VariableDeclaration) -> str {
     declarators = ', '.join(self.generate(d) for d in <>node.declarations);
-    return f"{self.indent()}{node.kind} {declarators};";
+    return f"{self.indent()}{<>node.kind} {declarators};";
 }
 
 """Generate function declaration."""
@@ -489,7 +489,7 @@ impl JSCodeGenerator.gen_function_declaration(<>node: es.FunctionDeclaration) ->
 
 """Generate switch case."""
 impl JSCodeGenerator.gen_switch_case(<>node: es.SwitchCase) -> str {
-    result = f"{self.indent()}case {self.generate(node.test)}:\\n"
+    result = f"{self.indent()}case {self.generate(<>node.test)}:\\n"
     if <>node.test
     else f"{self.indent()}default:\\n";
     self.indent_level += 1;
@@ -512,19 +512,19 @@ impl JSCodeGenerator.gen_switch_statement(<>node: es.SwitchStatement) -> str {
 """Generate catch clause."""
 impl JSCodeGenerator.gen_catch_clause(<>node: es.CatchClause) -> str {
     if <>node.param {
-        return f"catch ({self.generate(node.param)}) {self.generate(node.body)}";
+        return f"catch ({self.generate(<>node.param)}) {self.generate(<>node.body)}";
     }
-    return f"catch {self.generate(node.body)}";
+    return f"catch {self.generate(<>node.body)}";
 }
 
 """Generate try statement."""
 impl JSCodeGenerator.gen_try_statement(<>node: es.TryStatement) -> str {
-    result = f"{self.indent()}try {self.generate(node.block)}";
+    result = f"{self.indent()}try {self.generate(<>node.block)}";
     if <>node.handler {
-        result += f" {self.generate(node.handler)}";
+        result += f" {self.generate(<>node.handler)}";
     }
     if <>node.finalizer {
-        result += f" finally {self.generate(node.finalizer)}";
+        result += f" finally {self.generate(<>node.finalizer)}";
     }
     return result;
 }
