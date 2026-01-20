@@ -445,7 +445,9 @@ impl JSCodeGenerator.gen_class_body(<>node: es.ClassBody) -> str {
 """Generate class expression."""
 impl JSCodeGenerator.gen_class_expression(<>node: es.ClassExpression) -> str {
     name = self.generate(<>node.id) if <>node.id else '';
-    extends = f" extends {self.generate(node.superClass)}" if <>node.superClass else '';
+    extends = f" extends {self.generate(<>node.superClass)}"
+    if <>node.superClass
+    else '';
     body = self.generate(<>node.body);
     return f"class {name}{extends} {body}";
 }
@@ -453,7 +455,9 @@ impl JSCodeGenerator.gen_class_expression(<>node: es.ClassExpression) -> str {
 """Generate class declaration."""
 impl JSCodeGenerator.gen_class_declaration(<>node: es.ClassDeclaration) -> str {
     name = self.generate(<>node.id) if <>node.id else '';
-    extends = f" extends {self.generate(node.superClass)}" if <>node.superClass else '';
+    extends = f" extends {self.generate(<>node.superClass)}"
+    if <>node.superClass
+    else '';
     body = self.generate(<>node.body);
     return f"{self.indent()}class {name}{extends} {body}";
 }
