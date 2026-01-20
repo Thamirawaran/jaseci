@@ -34,14 +34,9 @@ glob _jwt_config = get_scale_config().get_jwt_config(),
      SSO_HOST = _sso_config['host'],
      logger = logging.getLogger(__name__);
 
-class Platforms(StrEnum) {
-    has GOOGLE: str = 'google';
-}
+enum Platforms ( StrEnum ) { GOOGLE = 'google' }
 
-class Operations(StrEnum) {
-    has LOGIN: str = 'login',
-        REGISTER: str = 'register';
-}
+enum Operations ( StrEnum ) { LOGIN = 'login', REGISTER = 'register' }
 
 class JacAPIServer(JServer) {
     # HMR (Hot Module Replacement) support fields
