@@ -255,7 +255,7 @@ impl JSCodeGenerator.gen_member_expression(<>node: es.MemberExpression) -> str {
 impl JSCodeGenerator.gen_assignment_expression(<>node: es.AssignmentExpression) -> str {
     left = self.generate(<>node.left);
     right = self.generate(<>node.right);
-    return f"({left} {<>node.operator} {right})";
+    return f"{left} {<>node.operator} {right}";
 }
 
 """Generate logical expression."""
@@ -269,6 +269,12 @@ impl JSCodeGenerator.gen_logical_expression(<>node: es.LogicalExpression) -> str
 impl JSCodeGenerator.gen_binary_expression(<>node: es.BinaryExpression) -> str {
     left = self.generate(<>node.left);
     right = self.generate(<>node.right);
+    if isinstance(<>node.left, es.AssignmentExpression) {
+        left = f"({left})";
+    }
+    if isinstance(<>node.right, es.AssignmentExpression) {
+        right = f"({right})";
+    }
     return f"({left} {<>node.operator} {right})";
 }
 
