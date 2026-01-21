@@ -237,7 +237,11 @@ impl JSCodeGenerator.gen_conditional_expression(
 
 """Generate member expression."""
 impl JSCodeGenerator.gen_member_expression(<>node: es.MemberExpression) -> str {
-    <>obj = self.generate(<>node.object);
+    if isinstance(<>node.object, es.BinaryExpression) {
+        <>obj = f"({self.generate(<>node.object)})";
+    } else {
+        <>obj = self.generate(<>node.object);
+    }
     optional = '?.' if <>node.optional else '';
     if <>node.computed {
         prop = self.generate(<>node.property);
