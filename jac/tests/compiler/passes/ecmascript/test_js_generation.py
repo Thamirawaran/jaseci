@@ -112,6 +112,10 @@ def test_core_fixture_emits_expected_constructs(
     ]:
         assert pattern in js_code
 
+    # Expressions with parentheses
+    for expr in ["(items.length + 1)", "(Math.round((divided * 10)) / 10)"]:
+        assert expr in js_code
+
     # Operators
     for op in ["===", "!==", "&&", "||"]:
         assert op in js_code
