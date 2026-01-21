@@ -241,13 +241,13 @@ impl JSCodeGenerator.gen_member_expression(<>node: es.MemberExpression) -> str {
     optional = '?.' if <>node.optional else '';
     if <>node.computed {
         prop = self.generate(<>node.property);
-        return f"{obj}{optional}[{prop}]";
+        return f"{<>obj}{optional}[{prop}]";
     } else {
         prop = self.generate(<>node.property);
         if optional {
-            return f"{obj}{optional}{prop}";
+            return f"{<>obj}{optional}{prop}";
         }
-        return f"{obj}.{prop}";
+        return f"{<>obj}.{prop}";
     }
 }
 
