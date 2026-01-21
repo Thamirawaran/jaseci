@@ -232,16 +232,12 @@ impl JSCodeGenerator.gen_conditional_expression(
     <>test = self.generate(<>node.test);
     consequent = self.generate(<>node.consequent);
     alternate = self.generate(<>node.alternate);
-    return f"{test} ? {consequent} : {alternate}";
+    return f"({test} ? {consequent} : {alternate})";
 }
 
 """Generate member expression."""
 impl JSCodeGenerator.gen_member_expression(<>node: es.MemberExpression) -> str {
-    if isinstance(<>node.object, es.BinaryExpression) {
-        <>obj = f"({self.generate(<>node.object)})";
-    } else {
-        <>obj = self.generate(<>node.object);
-    }
+    <>obj = self.generate(<>node.object);
     optional = '?.' if <>node.optional else '';
     if <>node.computed {
         prop = self.generate(<>node.property);
@@ -259,27 +255,21 @@ impl JSCodeGenerator.gen_member_expression(<>node: es.MemberExpression) -> str {
 impl JSCodeGenerator.gen_assignment_expression(<>node: es.AssignmentExpression) -> str {
     left = self.generate(<>node.left);
     right = self.generate(<>node.right);
-    return f"{left} {<>node.operator} {right}";
+    return f"({left} {<>node.operator} {right})";
 }
 
 """Generate logical expression."""
 impl JSCodeGenerator.gen_logical_expression(<>node: es.LogicalExpression) -> str {
     left = self.generate(<>node.left);
     right = self.generate(<>node.right);
-    return f"{left} {<>node.operator} {right}";
+    return f"({left} {<>node.operator} {right})";
 }
 
 """Generate binary expression."""
 impl JSCodeGenerator.gen_binary_expression(<>node: es.BinaryExpression) -> str {
     left = self.generate(<>node.left);
     right = self.generate(<>node.right);
-    if isinstance(<>node.left, (es.AssignmentExpression, es.BinaryExpression)) {
-        left = f"({left})";
-    }
-    if isinstance(<>node.right, (es.AssignmentExpression, es.BinaryExpression)) {
-        right = f"({right})";
-    }
-    return f"{left} {<>node.operator} {right}";
+    return f"({left} {<>node.operator} {right})";
 }
 
 """Generate update expression."""
