@@ -577,7 +577,6 @@ class JacWalker:
 
         # Capture reports starting index to track reports from this spawn
         ctx = JacRuntimeInterface.get_context()
-        reports_start_idx = len(ctx.reports)
         spawn_state = ctx.spawn_state.get()
 
         # Walker ability on any entry (runs once at spawn, before traversal)
@@ -587,7 +586,7 @@ class JacWalker:
             if walker.disengaged:
                 walker.ignores = []
                 # Capture reports generated during this spawn
-                warch.reports = ctx.reports[reports_start_idx:]
+                warch.reports = spawn_state.reports
                 spawn_state.reports.put_nowait(spawn_state._sentinel)
                 return warch
 
@@ -611,7 +610,7 @@ class JacWalker:
 
         walker.ignores = []
         # Capture reports generated during this spawn
-        warch.reports = ctx.reports[reports_start_idx:]
+        warch.reports = spawn_state.reports
         spawn_state.reports.put_nowait(spawn_state._sentinel)
         return warch
 
@@ -774,7 +773,6 @@ class JacWalker:
 
         # Capture reports starting index to track reports from this spawn
         ctx = JacRuntimeInterface.get_context()
-        reports_start_idx = len(ctx.reports)
         spawn_state = ctx.spawn_state.get()
 
         # Walker ability on any entry (runs once at spawn, before traversal)
@@ -786,7 +784,7 @@ class JacWalker:
             if walker.disengaged:
                 walker.ignores = []
                 # Capture reports generated during this spawn
-                warch.reports = ctx.reports[reports_start_idx:]
+                warch.reports = spawn_state.reports
                 spawn_state.reports.put_nowait(spawn_state._sentinel)
                 return warch
 
@@ -814,7 +812,7 @@ class JacWalker:
 
         walker.ignores = []
         # Capture reports generated during this spawn
-        warch.reports = ctx.reports[reports_start_idx:]
+        warch.reports = spawn_state.reports
         spawn_state.reports.put_nowait(spawn_state._sentinel)
         return warch
 
