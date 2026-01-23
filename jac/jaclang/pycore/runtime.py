@@ -1434,11 +1434,6 @@ class JacBasics:
             ctx.spawn_state.get().reports.put_nowait(expr)
 
     @staticmethod
-    def log_report_yield(expr: Any, custom: bool = False) -> None:  # noqa: ANN401
-        """Jac's async report stmt feature."""
-        pass
-
-    @staticmethod
     def refs(
         path: ObjectSpatialPath | NodeArchetype | list[NodeArchetype],
     ) -> (
