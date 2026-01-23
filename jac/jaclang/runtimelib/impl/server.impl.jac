@@ -238,13 +238,13 @@ impl ExecutionManager.execute_function(
     # Set user context for permission checks and ownership
     ctx = Jac.get_context();
     ctx.set_user_root(root_id);
-    ctx.reports = [];  # Clear reports for this request
+    reports = [];  # Clear reports for this request
     try {
         result = func(**args);
         Jac.commit();
         return {
             'result': JacSerializer.serialize(result),
-            'reports': JacSerializer.serialize(ctx.reports)
+            'reports': JacSerializer.serialize(reports)
         };
     } except Exception as e {
         return {'error': str(e)};
