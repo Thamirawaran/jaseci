@@ -256,7 +256,10 @@ impl ExecutionManager.spawn_walker(
     walker_cls: type[WalkerArchetype], fields: dict[(str, Any)], username: str
 ) -> dict[str, JsonValue] {
     import from jaclang.pycore.constructs { NodeArchetype }
-    import from inspect { iscoroutine }
+    import from inspect { iscoroutine, isgenerator }
+    import from typing { AsyncGenerator }
+    import asyncio;
+    import from jaclang.runtimelib.context { SpawnState }
     root_id = self.user_manager.get_root_id(username);
     if not root_id {
         return {'error': 'User not found'};
@@ -265,7 +268,22 @@ impl ExecutionManager.spawn_walker(
     # Set user context for permission checks and ownership
     ctx = Jac.get_context();
     ctx.set_user_root(root_id);
-    ctx.reports = [];  # Clear reports for this request
+    spawn_token = ctx.spawn_state.set(SpawnState());
+    async def _report_collector -> None {
+        spawn_state = ctx.spawn_state.get();
+        final_reports = [];
+        while True {
+            report_item = await spawn_state.reports.get();
+            if report_item is spawn_state._sentinel {
+                spawn_state.reports.task_done();
+                return final_reports;
+            } elif isgenerator(report_item) or isinstance(report_item, AsyncGenerator) {
+                return report_item;
+            } else {
+                final_reports.append(report_item);
+            }
+        }
+    }
     try {
         <>walker = walker_cls(**fields);
         if target_node_id {
@@ -277,18 +295,27 @@ impl ExecutionManager.spawn_walker(
             target_node = ctx.get_root();
         }
         spawn_result = Jac.spawn(<>walker, target_node);
+        task_report = _report_collector();
         # Handle async walkers - await the coroutine if spawn returns one
         if iscoroutine(spawn_result) {
-            await spawn_result;
+            (_, reports) = await asyncio.gather(spawn_result, task_report);
+        } else {
+            reports = await task_report;
         }
         Jac.commit();  # Persist changes
-        return {
-            'result': JacSerializer.serialize(<>walker),
-            'reports': JacSerializer.serialize(ctx.reports)
-        };
+        if isinstance(reports, list) {
+            return {
+                'result': JacSerializer.serialize(<>walker),
+                'reports': JacSerializer.serialize(reports)
+            };
+        } else {
+            return reports;
+        }
     } except Exception as e {
         import traceback;
         return {'error': str(e), 'traceback': traceback.format_exc()};
+    } finally {
+        ctx.spawn_state.reset(spawn_token);
     }
 }
 

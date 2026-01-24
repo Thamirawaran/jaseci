@@ -578,6 +578,7 @@ class JacWalker:
         # Capture reports starting index to track reports from this spawn
         ctx = JacRuntimeInterface.get_context()
         reports_start_idx = len(ctx.reports)
+        spawn_state = ctx.spawn_state.get()
 
         # Walker ability on any entry (runs once at spawn, before traversal)
         for i in warch._jac_entry_funcs_:
@@ -587,6 +588,7 @@ class JacWalker:
                 walker.ignores = []
                 # Capture reports generated during this spawn
                 warch.reports = ctx.reports[reports_start_idx:]
+                spawn_state.reports.put_nowait(spawn_state._sentinel)
                 return warch
 
         # Traverse recursively (walker.next is already set by spawn())
@@ -610,6 +612,7 @@ class JacWalker:
         walker.ignores = []
         # Capture reports generated during this spawn
         warch.reports = ctx.reports[reports_start_idx:]
+        spawn_state.reports.put_nowait(spawn_state._sentinel)
         return warch
 
     @staticmethod
@@ -772,6 +775,7 @@ class JacWalker:
         # Capture reports starting index to track reports from this spawn
         ctx = JacRuntimeInterface.get_context()
         reports_start_idx = len(ctx.reports)
+        spawn_state = ctx.spawn_state.get()
 
         # Walker ability on any entry (runs once at spawn, before traversal)
         for i in warch._jac_entry_funcs_:
@@ -783,6 +787,7 @@ class JacWalker:
                 walker.ignores = []
                 # Capture reports generated during this spawn
                 warch.reports = ctx.reports[reports_start_idx:]
+                spawn_state.reports.put_nowait(spawn_state._sentinel)
                 return warch
 
         # Traverse recursively (walker.next is already set by spawn())
@@ -810,6 +815,7 @@ class JacWalker:
         walker.ignores = []
         # Capture reports generated during this spawn
         warch.reports = ctx.reports[reports_start_idx:]
+        spawn_state.reports.put_nowait(spawn_state._sentinel)
         return warch
 
     @staticmethod
@@ -1425,7 +1431,7 @@ class JacBasics:
             ctx.custom = expr
         else:
             JacConsole.get_console().print(expr)
-            ctx.reports.append(expr)
+            ctx.spawn_state.get().reports.put_nowait(expr)
 
     @staticmethod
     def log_report_yield(expr: Any, custom: bool = False) -> None:  # noqa: ANN401
