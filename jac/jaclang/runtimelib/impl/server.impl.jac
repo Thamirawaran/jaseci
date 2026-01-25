@@ -276,7 +276,10 @@ impl ExecutionManager.spawn_walker(
             report_item = await spawn_state.reports.get();
             if report_item is spawn_state._sentinel {
                 spawn_state.reports.task_done();
-                return final_reports;
+                return {
+                    'result': JacSerializer.serialize(<>walker),
+                    'reports': JacSerializer.serialize(final_reports)
+                };
             } elif isgenerator(report_item) or isinstance(report_item, AsyncGenerator) {
                 return report_item;
             } else {
@@ -303,14 +306,7 @@ impl ExecutionManager.spawn_walker(
             reports = await task_report;
         }
         Jac.commit();  # Persist changes
-        if isinstance(reports, list) {
-            return {
-                'result': JacSerializer.serialize(<>walker),
-                'reports': JacSerializer.serialize(reports)
-            };
-        } else {
-            return reports;
-        }
+        return reports;
     } except Exception as e {
         import traceback;
         return {'error': str(e), 'traceback': traceback.format_exc()};

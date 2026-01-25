@@ -700,6 +700,21 @@ impl JacAPIServer.create_walker_callback(
         result = await self.execution_manager.spawn_walker(
             self.get_walkers()[walker_name], kwargs, (username or '__guest__')
         );
+        import from typing { AsyncGenerator }
+        import from inspect { isgenerator }
+        import from fastapi.responses { StreamingResponse }
+
+        if (isgenerator(result) or isinstance(result, AsyncGenerator)) {
+            return StreamingResponse(
+                result,
+                media_type='text/event-stream',
+                headers={
+                    'Cache-Control': 'no-cache',
+                    'Connection': 'close',
+                    'X-Accel-Buffering': 'no'
+                }
+            );
+        }
         if 'error' in result {
             return TransportResponse.fail(
                 code='EXECUTION_ERROR',
