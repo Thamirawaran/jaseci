@@ -36,7 +36,9 @@ obj ExecutionContext {
         system_root: NodeAnchor | None = None,
         user_root: NodeAnchor | None = None,
         entry_node: NodeAnchor | None = None,
-        spawn_state: ContextVar[SpawnState] = ContextVar('spawn_state');
+        spawn_state: ContextVar[SpawnState] = ContextVar(
+            'spawn_state', default=SpawnState()
+        );
 
     def postinit -> None;
     def _get_anchor(anchor_id: str) -> NodeAnchor;
