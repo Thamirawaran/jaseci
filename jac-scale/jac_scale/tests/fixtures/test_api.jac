@@ -105,6 +105,19 @@ walker : pub WalkerStream {
     }
 }
 
+import from typing { Generator }
+# Streaming function test
+def : pub FunctionStream(count: int = 3) -> Generator {
+    import time;
+    def stream -> Generator {
+        for i in range(count) {
+            time.sleep(0.5);
+            yield f"Func {i}";
+        }
+    }
+    report stream();
+}
+
 # Async Walker Test
 import asyncio;
 
