@@ -89,6 +89,22 @@ walker : pub PublicInfo {
     }
 }
 
+# Streaming Walker Test
+walker : pub Stream {
+    has count: int = 3;
+
+    can stream_reports with `root entry {
+        def stream -> str {
+            import time;
+            for i in range(self.count) {
+                time.sleep(0.5);
+                yield f"Report {i}";
+            }
+        }
+        report stream();
+    }
+}
+
 # Async Walker Test
 import asyncio;
 

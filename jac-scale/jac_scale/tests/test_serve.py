@@ -1833,3 +1833,30 @@ class TestJacScaleServeDevMode:
         assert reports[1]["status"] == "after_async_wait"
         assert reports[2]["status"] == "completed"
         assert "task" in reports[2]
+
+    def test_walker_stream_response(self) -> None:
+        """Test that walker streaming responses work correctly."""
+        response = requests.post(
+            f"{self.base_url}/walker/Stream",
+            json={"count": 3},
+            timeout=30,
+            stream=True,
+        )
+
+        assert response.status_code == 200, (
+            f"Failed with status {response.status_code}: {response.text}"
+        )
+        assert response.headers["content-type"] == "text/event-stream; charset=utf-8"
+        assert response.headers.get("cache-control") == "no-cache"
+        assert response.headers.get("connection") == "close"
+
+        # Collect streaming content
+        content = ""
+        for chunk in response.iter_content(chunk_size=1024, decode_unicode=True):
+            if chunk:
+                content += chunk
+
+        # The generator yields "Report 0", "Report 1", "Report 2" without delimiters
+        # They get concatenated together in the stream
+        expected = "Report 0Report 1Report 2"
+        assert content == expected, f"Expected '{expected}', got '{content}'"
