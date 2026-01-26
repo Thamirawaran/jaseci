@@ -90,13 +90,15 @@ obj ExecutionManager {
     has base_path: str,
         user_manager: UserManager;
 
-    def execute_function(
+    async def execute_function(
         func: Callable[(..., Any)], args: dict[(str, Any)], username: str
     ) -> dict[str, JsonValue];
 
     async def spawn_walker(
         walker_cls: type[WalkerArchetype], fields: dict[(str, Any)], username: str
     ) -> dict[str, JsonValue];
+
+    async def report_collector(spawn_state: SpawnState) -> dict[str, JsonValue];
 }
 
 """Introspects and caches module metadata."""
@@ -198,7 +200,7 @@ obj ExecutionHandler {
         execution_manager: ExecutionManager,
         user_manager: UserManager;
 
-    def call_function(
+    async def call_function(
         name: str, args: dict[(str, Any)], username: str
     ) -> TransportResponse;
 

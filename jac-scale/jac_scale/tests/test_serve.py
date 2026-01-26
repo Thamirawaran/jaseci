@@ -1837,7 +1837,7 @@ class TestJacScaleServeDevMode:
     def test_walker_stream_response(self) -> None:
         """Test that walker streaming responses work correctly."""
         response = requests.post(
-            f"{self.base_url}/walker/Stream",
+            f"{self.base_url}/walker/WalkerStream",
             json={"count": 3},
             timeout=30,
             stream=True,

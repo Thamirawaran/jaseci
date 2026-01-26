@@ -227,6 +227,22 @@ impl UserManager.close -> None {
     }
 }
 
+"""Collect reports from walker execution asynchronously."""
+impl ExecutionManager.report_collector(spawn_state: SpawnState) -> dict[str, JsonValue] {
+    final_reports = [];
+    while True {
+        report_item = await spawn_state.reports.get();
+        if report_item is spawn_state._sentinel {
+            spawn_state.reports.task_done();
+            return final_reports;
+        } elif isgenerator(report_item) or isinstance(report_item, AsyncGenerator) {
+            return report_item;
+        } else {
+            final_reports.append(report_item);
+        }
+    }
+}
+
 """Execute a function in user's context."""
 impl ExecutionManager.execute_function(
     func: Callable[(..., Any)], args: dict[(str, Any)], username: str
@@ -238,16 +254,31 @@ impl ExecutionManager.execute_function(
     # Set user context for permission checks and ownership
     ctx = Jac.get_context();
     ctx.set_user_root(root_id);
-    reports = [];  # Clear reports for this request
+    spawn_token = ctx.spawn_state.set(SpawnState());
+    spawn_state = ctx.spawn_state.get();
     try {
-        result = func(**args);
+        func_result = func(**args);
+        if iscoroutine(func_result) {
+            result = await func_result;
+        } else {
+            result = func_result;
+        }
+        spawn_state.reports.put_nowait(spawn_state._sentinel);
+        task_report = self.report_collector(spawn_state);
+        reports = await task_report;
         Jac.commit();
-        return {
-            'result': JacSerializer.serialize(result),
-            'reports': JacSerializer.serialize(reports)
-        };
+        if isgenerator(reports) or isinstance(reports, AsyncGenerator) {
+            return reports;
+        } else {
+            return {
+                'result': JacSerializer.serialize(result),
+                'reports': JacSerializer.serialize(reports)
+            };
+        }
     } except Exception as e {
         return {'error': str(e)};
+    } finally {
+        ctx.spawn_state.reset(spawn_token);
     }
 }
 
@@ -265,24 +296,7 @@ impl ExecutionManager.spawn_walker(
     ctx = Jac.get_context();
     ctx.set_user_root(root_id);
     spawn_token = ctx.spawn_state.set(SpawnState());
-    async def _report_collector -> None {
-        spawn_state = ctx.spawn_state.get();
-        final_reports = [];
-        while True {
-            report_item = await spawn_state.reports.get();
-            if report_item is spawn_state._sentinel {
-                spawn_state.reports.task_done();
-                return {
-                    'result': JacSerializer.serialize(<>walker),
-                    'reports': JacSerializer.serialize(final_reports)
-                };
-            } elif isgenerator(report_item) or isinstance(report_item, AsyncGenerator) {
-                return report_item;
-            } else {
-                final_reports.append(report_item);
-            }
-        }
-    }
+    spawn_state = ctx.spawn_state.get();
     try {
         <>walker = walker_cls(**fields);
         if target_node_id {
@@ -294,15 +308,23 @@ impl ExecutionManager.spawn_walker(
             target_node = ctx.get_root();
         }
         spawn_result = Jac.spawn(<>walker, target_node);
-        task_report = _report_collector();
+        task_report = self.report_collector(spawn_state);
         # Handle async walkers - await the coroutine if spawn returns one
         if iscoroutine(spawn_result) {
-            (_, reports) = await asyncio.gather(spawn_result, task_report);
+            (result, reports) = await asyncio.gather(spawn_result, task_report);
         } else {
+            result = spawn_result;
             reports = await task_report;
         }
         Jac.commit();  # Persist changes
-        return reports;
+        if isgenerator(reports) or isinstance(reports, AsyncGenerator) {
+            return reports;
+        } else {
+            return {
+                'result': JacSerializer.serialize(result),
+                'reports': JacSerializer.serialize(reports)
+            };
+        }
     } except Exception as e {
         import traceback;
         return {'error': str(e), 'traceback': traceback.format_exc()};
@@ -1028,7 +1050,9 @@ impl ExecutionHandler.call_function(
             meta=Meta(extra={'http_status': 404})
         );
     }
-    result = self.execution_manager.execute_function(functions[name], args, username);
+    result = await self.execution_manager.execute_function(
+        functions[name], args, username
+    );
     return TransportResponse.success(
         data=result, meta=Meta(extra={'http_status': 200})
     );
@@ -1450,7 +1474,9 @@ impl JacAPIServer.create_handler -> type[BaseHTTPRequestHandler] {
                         }
                     }
                 }
-                response = server.execution_handler.call_function(name, data, username);
+                response = asyncio.run(
+                    server.execution_handler.call_function(name, data, username)
+                );
                 self._send_response(response);
             } elif path.startswith('/walker/') {
                 name_parts = path.split('/');
@@ -1475,7 +1501,6 @@ impl JacAPIServer.create_handler -> type[BaseHTTPRequestHandler] {
                     }
                 }
                 fields = data | {'_jac_spawn_node': node_id};
-                import asyncio;
                 response = asyncio.run(
                     server.execution_handler.spawn_walker(name, fields, username)
                 );

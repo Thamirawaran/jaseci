@@ -90,7 +90,7 @@ walker : pub PublicInfo {
 }
 
 # Streaming Walker Test
-walker : pub Stream {
+walker : pub WalkerStream {
     has count: int = 3;
 
     can stream_reports with `root entry {
