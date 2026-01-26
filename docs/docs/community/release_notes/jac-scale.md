@@ -4,6 +4,8 @@ This document provides a summary of new features, improvements, and bug fixes in
 
 ## jac-scale 0.1.2 (Unreleased)
 
+- **Streaming Response Support**: Streaming responses are supported with walker spawn calls.
+
 ## jac-scale 0.1.1 (Latest Release)
 
 ## jac-scale 0.1.0
