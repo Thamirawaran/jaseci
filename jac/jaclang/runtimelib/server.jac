@@ -11,7 +11,14 @@ import from contextlib { suppress }
 import from http.server { BaseHTTPRequestHandler, HTTPServer }
 import from inspect { iscoroutine, isgenerator }
 import from pathlib { Path }
-import from typing { TYPE_CHECKING, Any, AsyncGenerator, Literal, TypeAlias, get_type_hints }
+import from typing {
+    TYPE_CHECKING,
+    Any,
+    AsyncGenerator,
+    Literal,
+    TypeAlias,
+    get_type_hints
+}
 import from urllib.parse { parse_qs, urlparse }
 import from jaclang.runtimelib.client_bundle { ClientBundleError }
 import from jaclang.runtimelib.context { SpawnState }
