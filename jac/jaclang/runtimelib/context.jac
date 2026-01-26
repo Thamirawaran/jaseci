@@ -13,7 +13,7 @@ import from jaclang.runtimelib.memory { Memory, TieredMemory }
 glob __all__ = ['ExecutionContext'];
 
 """Spawn State for managing per-spawn walker call."""
-obj SpawnState {
+obj CallState {
     has reports: Queue = Queue(),
         _sentinel: object = object();
 }
@@ -36,8 +36,8 @@ obj ExecutionContext {
         system_root: NodeAnchor | None = None,
         user_root: NodeAnchor | None = None,
         entry_node: NodeAnchor | None = None,
-        spawn_state: ContextVar[SpawnState] = ContextVar(
-            'spawn_state', default=SpawnState()
+        call_state: ContextVar[CallState] = ContextVar(
+            'call_state', default=CallState()
         );
 
     def postinit -> None;

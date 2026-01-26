@@ -577,7 +577,7 @@ class JacWalker:
 
         # Capture reports starting index to track reports from this spawn
         ctx = JacRuntimeInterface.get_context()
-        spawn_state = ctx.spawn_state.get()
+        call_state = ctx.call_state.get()
 
         # Walker ability on any entry (runs once at spawn, before traversal)
         for i in warch._jac_entry_funcs_:
@@ -586,8 +586,8 @@ class JacWalker:
             if walker.disengaged:
                 walker.ignores = []
                 # Capture reports generated during this spawn
-                warch.reports = spawn_state.reports
-                spawn_state.reports.put_nowait(spawn_state._sentinel)
+                warch.reports = call_state.reports
+                call_state.reports.put_nowait(call_state._sentinel)
                 return warch
 
         # Traverse recursively (walker.next is already set by spawn())
@@ -610,8 +610,8 @@ class JacWalker:
 
         walker.ignores = []
         # Capture reports generated during this spawn
-        warch.reports = spawn_state.reports
-        spawn_state.reports.put_nowait(spawn_state._sentinel)
+        warch.reports = call_state.reports
+        call_state.reports.put_nowait(call_state._sentinel)
         return warch
 
     @staticmethod
@@ -773,7 +773,7 @@ class JacWalker:
 
         # Capture reports starting index to track reports from this spawn
         ctx = JacRuntimeInterface.get_context()
-        spawn_state = ctx.spawn_state.get()
+        call_state = ctx.call_state.get()
 
         # Walker ability on any entry (runs once at spawn, before traversal)
         for i in warch._jac_entry_funcs_:
@@ -784,8 +784,8 @@ class JacWalker:
             if walker.disengaged:
                 walker.ignores = []
                 # Capture reports generated during this spawn
-                warch.reports = spawn_state.reports
-                spawn_state.reports.put_nowait(spawn_state._sentinel)
+                warch.reports = call_state.reports
+                call_state.reports.put_nowait(call_state._sentinel)
                 return warch
 
         # Traverse recursively (walker.next is already set by spawn())
@@ -812,8 +812,8 @@ class JacWalker:
 
         walker.ignores = []
         # Capture reports generated during this spawn
-        warch.reports = spawn_state.reports
-        spawn_state.reports.put_nowait(spawn_state._sentinel)
+        warch.reports = call_state.reports
+        call_state.reports.put_nowait(call_state._sentinel)
         return warch
 
     @staticmethod
@@ -1429,7 +1429,7 @@ class JacBasics:
             ctx.custom = expr
         else:
             JacConsole.get_console().print(expr)
-            ctx.spawn_state.get().reports.put_nowait(expr)
+            ctx.call_state.get().reports.put_nowait(expr)
 
     @staticmethod
     def refs(

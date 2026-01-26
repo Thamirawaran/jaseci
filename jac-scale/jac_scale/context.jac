@@ -3,7 +3,7 @@ import from dataclasses { MISSING }
 import from typing { Any }
 import from uuid { UUID }
 import from jaclang.pycore.constant { Constants as Con }
-import from jaclang.runtimelib.context { ExecutionContext, SpawnState }
+import from jaclang.runtimelib.context { ExecutionContext, CallState }
 
 """Jac Scale Execution Context with custom memory backend.
 

@@ -228,12 +228,12 @@ impl UserManager.close -> None {
 }
 
 """Collect reports from walker execution asynchronously."""
-impl ExecutionManager.report_collector(spawn_state: SpawnState) -> dict[str, JsonValue] {
+impl ExecutionManager.report_collector(call_state: CallState) -> dict[str, JsonValue] {
     final_reports = [];
     while True {
-        report_item = await spawn_state.reports.get();
-        if report_item is spawn_state._sentinel {
-            spawn_state.reports.task_done();
+        report_item = await call_state.reports.get();
+        if report_item is call_state._sentinel {
+            call_state.reports.task_done();
             return final_reports;
         } elif isgenerator(report_item) or isinstance(report_item, AsyncGenerator) {
             return report_item;
@@ -254,8 +254,8 @@ impl ExecutionManager.execute_function(
     # Set user context for permission checks and ownership
     ctx = Jac.get_context();
     ctx.set_user_root(root_id);
-    spawn_token = ctx.spawn_state.set(SpawnState());
-    spawn_state = ctx.spawn_state.get();
+    spawn_token = ctx.call_state.set(CallState());
+    call_state = ctx.call_state.get();
     try {
         func_result = func(**args);
         if iscoroutine(func_result) {
@@ -263,8 +263,8 @@ impl ExecutionManager.execute_function(
         } else {
             result = func_result;
         }
-        spawn_state.reports.put_nowait(spawn_state._sentinel);
-        task_report = self.report_collector(spawn_state);
+        call_state.reports.put_nowait(call_state._sentinel);
+        task_report = self.report_collector(call_state);
         reports = await task_report;
         Jac.commit();
         if isgenerator(reports) or isinstance(reports, AsyncGenerator) {
@@ -278,7 +278,7 @@ impl ExecutionManager.execute_function(
     } except Exception as e {
         return {'error': str(e)};
     } finally {
-        ctx.spawn_state.reset(spawn_token);
+        ctx.call_state.reset(spawn_token);
     }
 }
 
@@ -295,8 +295,8 @@ impl ExecutionManager.spawn_walker(
     # Set user context for permission checks and ownership
     ctx = Jac.get_context();
     ctx.set_user_root(root_id);
-    spawn_token = ctx.spawn_state.set(SpawnState());
-    spawn_state = ctx.spawn_state.get();
+    spawn_token = ctx.call_state.set(CallState());
+    call_state = ctx.call_state.get();
     try {
         <>walker = walker_cls(**fields);
         if target_node_id {
@@ -308,7 +308,7 @@ impl ExecutionManager.spawn_walker(
             target_node = ctx.get_root();
         }
         spawn_result = Jac.spawn(<>walker, target_node);
-        task_report = self.report_collector(spawn_state);
+        task_report = self.report_collector(call_state);
         # Handle async walkers - await the coroutine if spawn returns one
         if iscoroutine(spawn_result) {
             (result, reports) = await asyncio.gather(spawn_result, task_report);
@@ -329,7 +329,7 @@ impl ExecutionManager.spawn_walker(
         import traceback;
         return {'error': str(e), 'traceback': traceback.format_exc()};
     } finally {
-        ctx.spawn_state.reset(spawn_token);
+        ctx.call_state.reset(spawn_token);
     }
 }
 

@@ -21,7 +21,7 @@ import from typing {
 }
 import from urllib.parse { parse_qs, urlparse }
 import from jaclang.runtimelib.client_bundle { ClientBundleError }
-import from jaclang.runtimelib.context { SpawnState }
+import from jaclang.runtimelib.context { CallState }
 import from jaclang.runtimelib.transport {
     BaseTransport,
     TransportRequest,
@@ -98,7 +98,7 @@ obj ExecutionManager {
         walker_cls: type[WalkerArchetype], fields: dict[(str, Any)], username: str
     ) -> dict[str, JsonValue];
 
-    async def report_collector(spawn_state: SpawnState) -> dict[str, JsonValue];
+    async def report_collector(call_state: CallState) -> dict[str, JsonValue];
 }
 
 """Introspects and caches module metadata."""
