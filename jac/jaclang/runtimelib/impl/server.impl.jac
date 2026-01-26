@@ -256,10 +256,6 @@ impl ExecutionManager.spawn_walker(
     walker_cls: type[WalkerArchetype], fields: dict[(str, Any)], username: str
 ) -> dict[str, JsonValue] {
     import from jaclang.pycore.constructs { NodeArchetype }
-    import from inspect { iscoroutine, isgenerator }
-    import from typing { AsyncGenerator }
-    import asyncio;
-    import from jaclang.runtimelib.context { SpawnState }
     root_id = self.user_manager.get_root_id(username);
     if not root_id {
         return {'error': 'User not found'};
