@@ -227,7 +227,7 @@ impl UserManager.close -> None {
     }
 }
 
-"""Collect reports from walker execution asynchronously."""
+"""Collect reports from function, spawn execution asynchronously."""
 impl ExecutionManager.report_collector(call_state: CallState) -> dict[str, JsonValue] {
     final_reports = [];
     while True {

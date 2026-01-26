@@ -12,7 +12,7 @@ import from jaclang.runtimelib.memory { Memory, TieredMemory }
 
 glob __all__ = ['ExecutionContext'];
 
-"""Spawn State for managing per-spawn walker call."""
+"""Call State for managing function, spawn calls."""
 obj CallState {
     has reports: Queue = Queue(),
         _sentinel: object = object();
