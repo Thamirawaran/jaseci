@@ -248,7 +248,7 @@ def test_param_syntax(lang_fixture_abs_path: Callable[[str], str]) -> None:
 
 
 def test_new_keyword_errors(fixture_path: Callable[[str], str]) -> None:
-    """Parse param syntax jac file."""
+    """Parse new keyword errors jac file."""
     captured_output = io.StringIO()
     sys.stdout = captured_output
     prog = JacProgram()
@@ -267,7 +267,7 @@ def test_new_keyword_errors(fixture_path: Callable[[str], str]) -> None:
 
 
 def test_pass_keyword_errors(fixture_path: Callable[[str], str]) -> None:
-    """Parse param syntax jac file."""
+    """Parse pass keyword errors jac file."""
     captured_output = io.StringIO()
     sys.stdout = captured_output
     prog = JacProgram()
@@ -284,7 +284,7 @@ def test_pass_keyword_errors(fixture_path: Callable[[str], str]) -> None:
 
 
 def test_multiple_syntax_errors(fixture_path: Callable[[str], str]) -> None:
-    """Parse param syntax jac file."""
+    """Parse multiple syntax errors jac file."""
     captured_output = io.StringIO()
     sys.stdout = captured_output
     prog = JacProgram()
