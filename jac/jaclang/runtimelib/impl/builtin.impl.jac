@@ -142,7 +142,7 @@ impl restspec(**specs: Any) -> Callable {
     import from jaclang { JacRuntimeInterface as Jac }
     SpecsCls = Jac.get_api_server_class().RestSpecs;
     def decorator(cls: type) -> type {
-        cls.rest_specs = SpecsCls(**specs);
+        cls.restspec = SpecsCls(**specs);
         return cls;
     }
     return decorator;
