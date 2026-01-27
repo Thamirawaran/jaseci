@@ -254,7 +254,7 @@ impl ExecutionManager.execute_function(
     # Set user context for permission checks and ownership
     ctx = Jac.get_context();
     ctx.set_user_root(root_id);
-    spawn_token = ctx.call_state.set(CallState());
+    call_token = ctx.call_state.set(CallState());
     call_state = ctx.call_state.get();
     try {
         func_result = func(**args);
@@ -264,8 +264,7 @@ impl ExecutionManager.execute_function(
             result = func_result;
         }
         call_state.reports.put_nowait(call_state._sentinel);
-        task_report = self.report_collector(call_state);
-        reports = await task_report;
+        reports = await self.report_collector(call_state);
         Jac.commit();
         if isgenerator(reports) or isinstance(reports, AsyncGenerator) {
             return reports;
@@ -278,7 +277,7 @@ impl ExecutionManager.execute_function(
     } except Exception as e {
         return {'error': str(e)};
     } finally {
-        ctx.call_state.reset(spawn_token);
+        ctx.call_state.reset(call_token);
     }
 }
 
@@ -295,7 +294,7 @@ impl ExecutionManager.spawn_walker(
     # Set user context for permission checks and ownership
     ctx = Jac.get_context();
     ctx.set_user_root(root_id);
-    spawn_token = ctx.call_state.set(CallState());
+    call_token = ctx.call_state.set(CallState());
     call_state = ctx.call_state.get();
     try {
         <>walker = walker_cls(**fields);
@@ -329,7 +328,7 @@ impl ExecutionManager.spawn_walker(
         import traceback;
         return {'error': str(e), 'traceback': traceback.format_exc()};
     } finally {
-        ctx.call_state.reset(spawn_token);
+        ctx.call_state.reset(call_token);
     }
 }
 
