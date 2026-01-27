@@ -43,10 +43,6 @@ obj JacAPIServer(JServer) {
     has _hmr_pending: bool = False,
         _hot_reloader: Any | None = None;
 
-    obj RestSpecs {
-        has method: str;
-    }
-
     def postinit -> None;
     def login(username: str, password: str) -> TransportResponse;
     def register_login_endpoint -> None;
