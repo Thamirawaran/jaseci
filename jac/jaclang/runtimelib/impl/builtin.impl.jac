@@ -140,7 +140,7 @@ impl _get_jac -> type[JacRuntimeInterface] {
 """REST API decorator factory."""
 impl restspec(**specs: Any) -> Callable {
     import from jaclang { JacRuntimeInterface as Jac }
-    SpecsCls = Jac.get_rest_specs();
+    SpecsCls = Jac.get_api_server_class().RestSpecs;
     def decorator(cls: type) -> type {
         cls.rest_specs = SpecsCls(**specs);
         return cls;

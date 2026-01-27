@@ -203,6 +203,10 @@ obj JacAPIServer {
         port: int = 8000,
         base_path: str = "";
 
+    obj RestSpecs {
+        has method: str;
+    }
+
     def postinit -> None;
     def create_handler -> type[BaseHTTPRequestHandler];
     def load_module(force_reload: bool = False) -> None;
@@ -220,10 +224,6 @@ obj JacAPIServer {
     def get_client_bundle_code -> str;
     def print_endpoint_docs -> None;
     def start(dev: bool = False) -> None;
-}
-
-obj RestSpecs {
-    has method: str;
 }
 
 """Print comprehensive documentation for all endpoints that would be generated."""
