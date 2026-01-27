@@ -141,11 +141,9 @@ impl _get_jac -> type[JacRuntimeInterface] {
 impl restspec(**specs: Any) -> Callable {
     import from jaclang { JacRuntimeInterface as Jac }
     SpecsCls = Jac.get_rest_specs();
-
     def decorator(cls: type) -> type {
         cls.rest_specs = SpecsCls(**specs);
         return cls;
     }
-
     return decorator;
 }
