@@ -138,7 +138,7 @@ impl _get_jac -> type[JacRuntimeInterface] {
 }
 
 """REST API decorator factory."""
-impl rest_specs(**specs: Any) -> Callable {
+impl restspec(**specs: Any) -> Callable {
     import from jaclang { JacRuntimeInterface as Jac }
     SpecsCls = Jac.get_rest_specs();
 

@@ -57,7 +57,7 @@ def printgraph(
 
 def _jac_graph_json(file: (str | None) = None) -> str;
 
-def rest_specs(**specs: Any) -> Callable;
+def restspec(**specs: Any) -> Callable;
 
 glob __all__ = [
          'printgraph',
