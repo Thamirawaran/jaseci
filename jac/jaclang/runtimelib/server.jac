@@ -222,5 +222,9 @@ obj JacAPIServer {
     def start(dev: bool = False) -> None;
 }
 
+obj RestSpecs {
+    has method: str;
+}
+
 """Print comprehensive documentation for all endpoints that would be generated."""
 def print_endpoint_docs(server: JacAPIServer) -> None;

@@ -1733,6 +1733,13 @@ class JacAPIServer:
         return HTTPServer((host, port), handler_class)
 
     @staticmethod
+    def get_rest_specs() -> type:
+        """Get REST API specifications."""
+        from jaclang.runtimelib.server import RestSpecs
+
+        return RestSpecs
+
+    @staticmethod
     def render_page(
         introspector: ModuleIntrospector,
         function_name: str,
