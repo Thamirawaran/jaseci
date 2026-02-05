@@ -6,6 +6,7 @@ import os;
 import sys;
 import time;
 import threading;
+import from collections { deque }
 import from concurrent.futures { Future }
 import from queue { Queue, Empty }
 import from typing { Callable, Optional }
@@ -46,9 +47,12 @@ obj JacLangServer(JacProgram, LanguageServer) {
     has sem_managers: dict = {},
         module_manager: ModuleManager | None by postinit,
         queue: Queue = Queue(),
+        pipe: deque = deque(maxlen=1),
+        dirty_files: dict[str, Task] = {},
         worker_future: Future | None by postinit,
         last_task: Task | None = None,
         _shutdown_called: bool = False,
+        _work_event: threading.Event = threading.Event(),
         _state_lock: threading.RLock by postinit;
 
     def postinit -> None;

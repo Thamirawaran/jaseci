@@ -21,21 +21,17 @@ impl JacLangServer.postinit -> None {
 impl JacLangServer.type_check(file_uri: str) -> None {
     if self.last_task and not self.last_task.cancel_token.is_set() {
         self.last_task.cancel_token.set();
+        if file_uri != self.last_task.file_uri {
+            self.dirty_files[self.last_task.file_uri] = self.last_task;
+        }
         self.debug(
             " Cancelling id: " + str(self.last_task.task_id) + " " + str(time.time())
         );
     }
     self.last_task = Task(file_uri);
-    # Remove all the previous tasks.
-    while True {
-        try {
-            self.queue.get_nowait();
-            self.queue.task_done();
-        } except Empty {
-            break;
-        }
-    }
-    self.queue.put(self.last_task);
+    self.pipe.append(self.last_task);
+    # Trigger the worker to pick up the new task.
+    self._work_event.set();
 }
 
 """Rebuild a file and its dependencies (typecheck)."""
@@ -100,12 +96,26 @@ impl JacLangServer.type_check_file(
 impl JacLangServer.dispatcher -> None {
     while True {
         start_time = time.time();
-        task: Task | None = self.queue.get();
-
-        if task is None {
-            self.queue.task_done();
-            self.debug("Task was None, exiting dispatcher.");
+        print(
+            "Dispatcher waiting for work...",
+            start_time,
+            self.dirty_files.keys(),
+            file=sys.stderr
+        );
+        # Wait until there's a task to process or shutdown is called.
+        self._work_event.wait();
+        if self._shutdown_called {
+            self.debug("Shutting down dispatcher");
             break;
+        } elif self.pipe {
+            task = self.pipe.popleft();
+        } elif self.dirty_files {
+            # Get the most recent dirty file
+            (_, task) = self.dirty_files.popitem();
+        } else {
+            # No tasks to process, wait for the next one. (Avoid busy waiting)
+            self._work_event.clear();
+            continue;
         }
 
         self.debug("Dispatching task id: " + str(task.task_id));
@@ -113,7 +123,7 @@ impl JacLangServer.dispatcher -> None {
             self.type_check_file(task.file_uri, cancel_token=task.cancel_token);
             self.lsp.send_request(lspt.WORKSPACE_SEMANTIC_TOKENS_REFRESH);
         } finally {
-            self.queue.task_done();
+        # self.queue.task_done();
         }
         if task.cancel_token.is_set() {
             self.debug(
@@ -121,7 +131,11 @@ impl JacLangServer.dispatcher -> None {
             );
         } else {
             elapsed = time.time() - start_time;
-            self.debug(f"Task completed id: {str(task.task_id)}, took: {elapsed:.4f}s");
+            self.debug(
+                f"Task completed id: {str(task.task_id)}, took: {elapsed:.4f}s {str(
+                    task.file_uri
+                )}"
+            );
         }
     }
 }
@@ -134,7 +148,7 @@ impl JacLangServer.shutdown -> None {
     self._shutdown_called = True;
     try {
         if self?.worker_future and not self?.worker_future.done() {
-            self.queue.put(None);  # Signal the worker to exit
+            self._work_event.set();  # Wake up the worker to let it exit gracefully.
             wait self.worker_future ;  # Wait for the worker to finish
         }
     } finally {
