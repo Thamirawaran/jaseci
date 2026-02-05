@@ -8,7 +8,6 @@ import time;
 import threading;
 import from collections { deque }
 import from concurrent.futures { Future }
-import from queue { Queue, Empty }
 import from typing { Callable, Optional }
 
 import jaclang.pycore.unitree as uni;
@@ -46,17 +45,19 @@ obj Task {
 obj JacLangServer(JacProgram, LanguageServer) {
     has sem_managers: dict = {},
         module_manager: ModuleManager | None by postinit,
-        queue: Queue = Queue(),
+        # Task management
         pipe: deque = deque(maxlen=1),
         dirty_files: dict[str, bool] = {},
-        worker_future: Future | None by postinit,
         last_task: Task | None = None,
-        _shutdown_called: bool = False,
-        _work_event: threading.Event = threading.Event(),
+        worker_future: Future | None by postinit,
+        # Synchronization
         _state_lock: threading.RLock by postinit,
+        _work_event: threading.Event = threading.Event(),
+        _idle_event: threading.Event by postinit,
+        _shutdown_called: bool = False,
+        # Debouncing
         _debounce_timer: threading.Timer | None = None,
-        _pending_file_uri: str | None = None,
-        _debounce_lock: threading.Lock = threading.Lock();
+        _pending_file_uri: str | None = None;
 
     def postinit -> None;
     def dispatcher -> None;
@@ -76,7 +77,8 @@ obj JacLangServer(JacProgram, LanguageServer) {
     ) -> bool;
 
     def type_check(file_uri: str) -> None;
-    def _do_type_check -> None;
+    def _do_type_check(file_uri: str) -> None;
+    def _flush_debounce -> None;
     def get_token_at_position(
         file_path: str, position: lspt.Position
     ) -> Optional[uni.AstNode];
