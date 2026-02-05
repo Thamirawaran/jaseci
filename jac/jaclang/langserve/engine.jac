@@ -50,14 +50,11 @@ obj JacLangServer(JacProgram, LanguageServer) {
         dirty_files: dict[str, bool] = {},
         last_task: Task | None = None,
         worker_future: Future | None by postinit,
-        # Synchronization
         _state_lock: threading.RLock by postinit,
         _work_event: threading.Event = threading.Event(),
         _idle_event: threading.Event by postinit,
         _shutdown_called: bool = False,
-        # Debouncing
-        _debounce_timer: threading.Timer | None = None,
-        _pending_file_uri: str | None = None;
+        _debounce_timer: threading.Timer | None = None;
 
     def postinit -> None;
     def dispatcher -> None;
@@ -78,14 +75,12 @@ obj JacLangServer(JacProgram, LanguageServer) {
 
     def type_check(file_uri: str) -> None;
     def _do_type_check(file_uri: str) -> None;
-    def _flush_debounce -> None;
     def get_token_at_position(
         file_path: str, position: lspt.Position
     ) -> Optional[uni.AstNode];
 
     def debug(msg: str) -> None;
-    async def wait_till_idle -> None;
-    def wait_till_idle_sync -> None;
+    def wait_till_idle_sync(file_uri: str) -> None;
     async def get_completion(
         file_uri: str, position: lspt.Position, completion_trigger: Optional[str]
     ) -> lspt.CompletionList;

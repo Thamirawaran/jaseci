@@ -43,7 +43,6 @@ impl JacLangServer.type_check(file_uri: str) -> None {
             );
         }
         # Store for _flush_debounce and start timer with file_uri as argument
-        self._pending_file_uri = file_uri;
         self._debounce_timer = threading.Timer(
             DEBOUNCE_DELAY, self._do_type_check, args=[file_uri]
         );
@@ -56,7 +55,6 @@ impl JacLangServer._do_type_check(file_uri: str) -> None {
     with self._state_lock {
         # Clear timer reference and pending file
         self._debounce_timer = None;
-        self._pending_file_uri = None;
         # Clear idle event since we're about to add work
         self._idle_event.clear();
     }
@@ -517,39 +515,20 @@ impl JacLangServer.get_ast_of_file(file_path: str) -> Optional[uni.AstNode] {
     return None;
 }
 
-impl JacLangServer.wait_till_idle -> None {
-    self.debug("Waiting for server to be idle...");
-    await asyncio.to_thread(self.wait_till_idle_sync);
-    self.debug("Server is now idle");
-}
-
 """Synchronous version of wait_till_idle for testing."""
-impl JacLangServer.wait_till_idle_sync -> None {
+impl JacLangServer.wait_till_idle_sync(file_uri: str) -> None {
     self.debug("Waiting for server to be idle (sync)...");
     # First, flush any pending debounce timer
-    self._flush_debounce();
-    # Wait for dispatcher to become idle
-    self._idle_event.wait();
-    self.debug("Server is now idle");
-}
-
-"""Flush any pending debounce timer and trigger type check immediately."""
-impl JacLangServer._flush_debounce -> None {
-    file_uri: str | None = None;
     with self._state_lock {
         if self._debounce_timer {
             self._debounce_timer.cancel();
             self._debounce_timer = None;
         }
-        if self._pending_file_uri {
-            file_uri = self._pending_file_uri;
-            self._pending_file_uri = None;
-        }
     }
-    # Call outside the lock to avoid potential deadlock
-    if file_uri {
-        self._do_type_check(file_uri);
-    }
+    self._do_type_check(file_uri);
+    # Wait for dispatcher to become idle
+    self._idle_event.wait();
+    self.debug("Server is now idle");
 }
 
 """Return completion for a file."""
