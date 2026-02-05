@@ -48,12 +48,15 @@ obj JacLangServer(JacProgram, LanguageServer) {
         module_manager: ModuleManager | None by postinit,
         queue: Queue = Queue(),
         pipe: deque = deque(maxlen=1),
-        dirty_files: dict[str, Task] = {},
+        dirty_files: dict[str, bool] = {},
         worker_future: Future | None by postinit,
         last_task: Task | None = None,
         _shutdown_called: bool = False,
         _work_event: threading.Event = threading.Event(),
-        _state_lock: threading.RLock by postinit;
+        _state_lock: threading.RLock by postinit,
+        _debounce_timer: threading.Timer | None = None,
+        _pending_file_uri: str | None = None,
+        _debounce_lock: threading.Lock = threading.Lock();
 
     def postinit -> None;
     def dispatcher -> None;
@@ -73,6 +76,7 @@ obj JacLangServer(JacProgram, LanguageServer) {
     ) -> bool;
 
     def type_check(file_uri: str) -> None;
+    def _do_type_check -> None;
     def get_token_at_position(
         file_path: str, position: lspt.Position
     ) -> Optional[uni.AstNode];

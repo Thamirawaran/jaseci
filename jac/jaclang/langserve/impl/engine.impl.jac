@@ -18,16 +18,47 @@ impl JacLangServer.postinit -> None {
     logging.getLogger().setLevel(logging.CRITICAL);
 }
 
+"""Debounced type check - waits for typing to pause before starting analysis."""
 impl JacLangServer.type_check(file_uri: str) -> None {
-    if self.last_task and not self.last_task.cancel_token.is_set() {
-        self.last_task.cancel_token.set();
-        if file_uri != self.last_task.file_uri {
-            self.dirty_files[self.last_task.file_uri] = self.last_task;
+    DEBOUNCE_DELAY = 0.3;  # 300ms debounce delay
+
+    with self._debounce_lock {
+        # Cancel any pending debounce timer
+        if self._debounce_timer {
+            self._debounce_timer.cancel();
+            self._debounce_timer = None;
         }
-        self.debug(
-            " Cancelling id: " + str(self.last_task.task_id) + " " + str(time.time())
-        );
+
+        # Cancel any running task
+        if self.last_task and not self.last_task.cancel_token.is_set() {
+            self.last_task.cancel_token.set();
+            if file_uri != self.last_task.file_uri {
+                self.dirty_files[self.last_task.file_uri] = True;
+            }
+            self.debug(
+                " Cancelling id: " + str(self.last_task.task_id) + " " + str(time.time())
+            );
+        }
+
+        # Store pending file and start debounce timer
+        self._pending_file_uri = file_uri;
+        self._debounce_timer = threading.Timer(DEBOUNCE_DELAY, self._do_type_check);
+        self._debounce_timer.start();
     }
+}
+
+"""Actually queue the type check task after debounce delay."""
+impl JacLangServer._do_type_check -> None {
+    with self._debounce_lock {
+        if not self._pending_file_uri {
+            return;
+        }
+        file_uri = self._pending_file_uri;
+        self._pending_file_uri = None;
+        self._debounce_timer = None;
+    }
+
+    self.debug("Debounce triggered, starting type check for " + file_uri);
     self.last_task = Task(file_uri);
     self.pipe.append(self.last_task);
     # Trigger the worker to pick up the new task.
@@ -110,8 +141,9 @@ impl JacLangServer.dispatcher -> None {
         } elif self.pipe {
             task = self.pipe.popleft();
         } elif self.dirty_files {
-            # Get the most recent dirty file
-            (_, task) = self.dirty_files.popitem();
+            # Get the most recent dirty file and create a NEW task for it
+            (file_uri, _) = self.dirty_files.popitem();
+            task = Task(file_uri);
         } else {
             # No tasks to process, wait for the next one. (Avoid busy waiting)
             self._work_event.clear();
@@ -147,6 +179,13 @@ impl JacLangServer.shutdown -> None {
     }
     self._shutdown_called = True;
     try {
+        # Cancel any pending debounce timer
+        with self._debounce_lock {
+            if self._debounce_timer {
+                self._debounce_timer.cancel();
+                self._debounce_timer = None;
+            }
+        }
         if self?.worker_future and not self?.worker_future.done() {
             self._work_event.set();  # Wake up the worker to let it exit gracefully.
             wait self.worker_future ;  # Wait for the worker to finish
