@@ -441,11 +441,21 @@ impl TypeEvaluator._get_type_of_symbol(symbol: uni.Symbol) -> TypeBase {
             # ---- Handle SepcialForm in typing.pyi ----
             # NOTE: This is different from pyright, that does get the same logic in
             # getTypeOfAnnotation() which we don't have.
-            if node_.loc.mod_path == self._TYPING_STUB_FILE_PATH {
-                match node_.sym_name {
-                    case "Final":
-                        return self.prefetch.final_class;
+            if node_.loc.mod_path {
+                node_mod_path = Path(node_.loc.mod_path).resolve();
+                typing_stub_path = Path(self._TYPING_STUB_FILE_PATH).resolve();
+                builtins_stub_path = Path(self._BUILTINS_STUB_FILE_PATH).resolve();
+                if node_mod_path in (typing_stub_path, builtins_stub_path) {
+                    match node_.sym_name {
+                        case "Final":
+                            return self.prefetch.final_class;
 
+                        case "LiteralString":
+                            # Jac currently doesn't model literal string refinement.
+                            # Treat LiteralString as builtins.str for overload resolution.
+                            return self.prefetch.str_class;
+
+                    }
                 }
             }
 
