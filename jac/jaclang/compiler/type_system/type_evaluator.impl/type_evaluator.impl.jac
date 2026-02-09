@@ -451,9 +451,7 @@ impl TypeEvaluator._get_type_of_symbol(symbol: uni.Symbol) -> TypeBase {
                             return self.prefetch.final_class;
 
                         case "LiteralString":
-                            # Jac currently doesn't model literal string refinement.
-                            # Treat LiteralString as builtins.str for overload resolution.
-                            return self.prefetch.str_class;
+                            return self.prefetch.literal_string_class;
 
                     }
                 }
@@ -847,6 +845,7 @@ impl TypeEvaluator._prefetch_types{
     self.prefetch.root_class = get_jac_builtin_type("Root");
     self.prefetch.root_class.shared.is_root_class = True;
     self.prefetch.final_class = get_jac_builtin_type("Final");
+    self.prefetch.literal_string_class = get_jac_builtin_type("LiteralString");
     self.prefetch.node_class = get_jac_builtin_type("Node");
     self.prefetch.walker_class = get_jac_builtin_type("Walker");
     self.prefetch.jsx_element_class = get_jac_builtin_type("JsxElement");
