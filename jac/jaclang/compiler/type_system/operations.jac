@@ -93,7 +93,7 @@ def get_type_of_binary_operation(
     left_type = evaluator.get_type_of_expression(expr.left);
     right_type = evaluator.get_type_of_expression(expr.right);
     if left_type.is_any_type() or right_type.is_any_type() {
-        return jtypes.AnyType();
+        return jtypes.UnknownType();
     }
     # Boolean operations
     if (
