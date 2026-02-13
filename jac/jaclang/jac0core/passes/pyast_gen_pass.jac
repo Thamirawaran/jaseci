@@ -1116,7 +1116,9 @@ variables
                 jac_node=`node.method_owner
             );
         } else {
-            caller = self.sync(ast3.Name(self._py_name(`node.name_ref), ctx=ast3.Load()));
+            caller = self.sync(
+                ast3.Name(self._py_name(`node.name_ref), ctx=ast3.Load())
+            );
         }
         args = self.sync(
             ast3.Dict(
