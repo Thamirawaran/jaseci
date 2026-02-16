@@ -818,10 +818,10 @@ impl Lexer.scan_jsx_tag_token -> Token {
 impl Lexer.scan_jsx_content -> Token {
     # Skip whitespace and comments in JSX content.
     # Comments (# ...) are recognized here so that lines like
-    # '# {# text #}' are consumed entirely as comments instead of
-    # being partially parsed as text + expression, which would cause
-    # the closing brace to be eaten by skip_line_comment and freeze.
-    self.skip_whitespace_and_comments();
+    # Only skip whitespace in JSX — # is regular text content, not a comment.
+    # The freeze bug (# {# text #}) is handled in skip_line_comment which
+    # stops before '}' when jsx_brace_depth > 0.
+    self.skip_whitespace();
     # Do NOT skip whitespace here — whitespace in JSX content is significant
     # for same-line spacing (e.g., "{expr}  text"). Whitespace normalization
     # is handled downstream by JsxText.get_normalized_text(). Whitespace-only
