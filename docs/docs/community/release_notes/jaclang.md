@@ -4,6 +4,8 @@ This document provides a summary of new features, improvements, and bug fixes in
 
 ## jaclang 0.10.3 (Unreleased)
 
+- **Fix: Lexer Hang on JSX Comments**: Fixed compiler hanging when comments like `# {# text #}` appear inside JSX elements.
+
 ## jaclang 0.10.2 (Latest Release)
 
 - **Unified Primitive Codegen Interface**: Added abstract emitter contracts (`primitives.jac`) for all Jac primitive type methods and builtin functions. Each compilation backend (Python, ECMAScript, Native) must implement these interfaces, ensuring consistent primitive support across all code generation pathways. Python, JS, and Native backend implementations provided.
