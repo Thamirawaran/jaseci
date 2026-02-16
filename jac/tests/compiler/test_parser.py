@@ -288,6 +288,138 @@ def test_jsx_comprehensive_fixture() -> None:
         assert present, f"{label} missing from AST pretty print"
 
 
+def test_jsx_comment_with_brace_pattern() -> None:
+    """Test that comments like # {# text #} in JSX content don't hang the lexer.
+
+    This was a bug where the pattern # {# text #} would cause the lexer to hang
+    because the { would start a JSX expression, then # would start a line comment
+    that consumed the closing }, leaving the expression unclosed forever.
+    """
+    from jaclang.jac0core.parser import Lexer
+
+    # Test case 1: Comment with space before brace
+    code1 = """cl{
+    def:pub test() -> Any {
+        return <div>
+            # {# comment #}
+            <span />
+        </div>;
+    }
+}"""
+    lexer1 = Lexer(source=code1, file_path="test.jac")
+    tokens1 = lexer1.tokenize()
+    assert len(tokens1) > 0, "Should tokenize without hanging"
+    assert not lexer1.errors, f"Should have no lexer errors: {lexer1.errors}"
+
+    # Test case 2: Comment without space (#{# text #})
+    code2 = """cl{
+    def:pub test() -> Any {
+        return <div>
+            #{# foo #}
+        </div>;
+    }
+}"""
+    lexer2 = Lexer(source=code2, file_path="test.jac")
+    tokens2 = lexer2.tokenize()
+    assert len(tokens2) > 0, "Should tokenize without hanging"
+    assert not lexer2.errors, f"Should have no lexer errors: {lexer2.errors}"
+
+    # Test case 3: Multiple comment patterns in JSX
+    code3 = """cl{
+    def:pub test() -> Any {
+        return <div>
+            # {# === Section 1 === #}
+            <span />
+            # {# === Section 2 === #}
+            <span />
+        </div>;
+    }
+}"""
+    lexer3 = Lexer(source=code3, file_path="test.jac")
+    tokens3 = lexer3.tokenize()
+    assert len(tokens3) > 0, "Should tokenize without hanging"
+    assert not lexer3.errors, f"Should have no lexer errors: {lexer3.errors}"
+
+
+def test_jsx_comment_preserves_normal_behavior() -> None:
+    """Test that the JSX comment fix doesn't break normal comment behavior."""
+    from jaclang.jac0core.parser import Lexer
+
+    # Normal comments with } outside JSX should work unchanged
+    code1 = """
+# This comment has a closing brace } in it
+def foo() -> int {
+    return 1;
+}
+"""
+    lexer1 = Lexer(source=code1, file_path="test.jac")
+    tokens1 = lexer1.tokenize()
+    assert len(tokens1) > 0
+    # The comment should contain the full text including }
+    assert any("}" in c[0] for c in lexer1.comments), "Normal comment should contain }"
+
+    # Block comments in JSX expressions should work with }
+    code2 = """cl{
+    def:pub test() -> Any {
+        return <div>{foo #* comment with } brace *#}</div>;
+    }
+}"""
+    lexer2 = Lexer(source=code2, file_path="test.jac")
+    tokens2 = lexer2.tokenize()
+    assert len(tokens2) > 0
+    assert not lexer2.errors
+    # Block comment should contain }
+    block_comments = [c for c in lexer2.comments if c[7]]  # c[7] is is_block flag
+    assert any("}" in c[0] for c in block_comments), "Block comment should contain }"
+
+
+def test_jsx_whitespace_preservation() -> None:
+    """Test that whitespace in JSX text content is preserved."""
+    from jaclang.jac0core.parser import Lexer, TokenKind
+
+    code = """cl{
+    def:pub test() -> Any {
+        return <div>Hello   World</div>;
+    }
+}"""
+    lexer = Lexer(source=code, file_path="test.jac")
+    tokens = lexer.tokenize()
+
+    # Find JSX_TEXT tokens
+    jsx_text_tokens = [t for t in tokens if t.kind == TokenKind.JSX_TEXT]
+    assert len(jsx_text_tokens) == 1
+    assert jsx_text_tokens[0].value == "Hello   World", "Whitespace should be preserved"
+
+
+def test_jsx_line_comment_truncates_at_brace_in_expression() -> None:
+    """Test that line comments inside JSX expressions truncate at }.
+
+    This is a known trade-off of the fix: line comments inside JSX expressions
+    cannot contain } characters. Use block comments as an alternative.
+    """
+    from jaclang.jac0core.parser import Lexer, TokenKind
+
+    # Line comment inside JSX expression with } - comment truncates at }
+    code = """cl{
+    def:pub test() -> Any {
+        return <div>{foo # comment with } brace
+        }</div>;
+    }
+}"""
+    lexer = Lexer(source=code, file_path="test.jac")
+    tokens = lexer.tokenize()
+    assert len(tokens) > 0
+
+    # The comment should be truncated (not contain the } or text after it)
+    line_comments = [c for c in lexer.comments if not c[7]]  # c[7] is is_block flag
+    assert len(line_comments) == 1
+    assert "}" not in line_comments[0][0], "Line comment in JSX expr should truncate at }"
+
+    # The } should become a separate token, and remaining text becomes JSX_TEXT
+    jsx_text_tokens = [t for t in tokens if t.kind == TokenKind.JSX_TEXT]
+    assert any("brace" in t.value for t in jsx_text_tokens), "Text after } should be JSX_TEXT"
+
+
 def test_client_keyword_tagging() -> None:
     """Test that cl keyword properly tags elements as client declarations.
 

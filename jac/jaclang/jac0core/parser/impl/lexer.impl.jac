@@ -146,6 +146,14 @@ impl Lexer.skip_line_comment{
     start_col = self.col;
     start_pos = self.pos;
     while not self.at_end() and self.current() != "\n" {
+        # When inside a JSX expression ({...}), stop the comment before '}'
+        # so the closing brace can properly end the expression.
+        # Without this, a comment like # {# text #} would consume the '}'
+        # inside the expression, preventing the brace from ever closing
+        # and causing the lexer/parser to freeze.
+        if self.jsx_brace_depth > 0 and self.current() == "}" {
+            break;
+        }
         self.advance();
     }
     comment_text = self.source[start_pos:self.pos];
@@ -808,6 +816,12 @@ impl Lexer.scan_jsx_tag_token -> Token {
 
 """Scan JSX content between tags."""
 impl Lexer.scan_jsx_content -> Token {
+    # Skip whitespace and comments in JSX content.
+    # Comments (# ...) are recognized here so that lines like
+    # '# {# text #}' are consumed entirely as comments instead of
+    # being partially parsed as text + expression, which would cause
+    # the closing brace to be eaten by skip_line_comment and freeze.
+    self.skip_whitespace_and_comments();
     # Do NOT skip whitespace here — whitespace in JSX content is significant
     # for same-line spacing (e.g., "{expr}  text"). Whitespace normalization
     # is handled downstream by JsxText.get_normalized_text(). Whitespace-only
