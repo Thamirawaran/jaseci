@@ -413,11 +413,15 @@ def test_jsx_line_comment_truncates_at_brace_in_expression() -> None:
     # The comment should be truncated (not contain the } or text after it)
     line_comments = [c for c in lexer.comments if not c[7]]  # c[7] is is_block flag
     assert len(line_comments) == 1
-    assert "}" not in line_comments[0][0], "Line comment in JSX expr should truncate at }"
+    assert "}" not in line_comments[0][0], (
+        "Line comment in JSX expr should truncate at }"
+    )
 
     # The } should become a separate token, and remaining text becomes JSX_TEXT
     jsx_text_tokens = [t for t in tokens if t.kind == TokenKind.JSX_TEXT]
-    assert any("brace" in t.value for t in jsx_text_tokens), "Text after } should be JSX_TEXT"
+    assert any("brace" in t.value for t in jsx_text_tokens), (
+        "Text after } should be JSX_TEXT"
+    )
 
 
 def test_client_keyword_tagging() -> None:
