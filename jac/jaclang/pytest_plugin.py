@@ -60,12 +60,20 @@ def pytest_collect_file(parent: pytest.Collector, file_path: Path) -> JacFile | 
 _jac_runtime_ready = False
 
 
+def _ensure_vendored_module_path() -> None:
+    """Expose vendored third-party packages as top-level imports."""
+    vendor_dir = os.path.realpath(str(Path(__file__).resolve().parent / "vendor"))
+    if vendor_dir not in sys.path:
+        sys.path.insert(0, vendor_dir)
+
+
 def _ensure_jac_runtime():
     """Initialise the Jac runtime exactly once per pytest session."""
     global _jac_runtime_ready
     if _jac_runtime_ready:
         return
     try:
+        _ensure_vendored_module_path()
         from jaclang.jac0core.runtime import JacRuntime
 
         JacRuntime.setup()
