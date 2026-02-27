@@ -3,6 +3,7 @@ with entry {
         if i == 1 { continue; }
         print(i);
         if i == 3 { break; }
+    } else {
+        print("done");
     }
-    y = 0;
 }

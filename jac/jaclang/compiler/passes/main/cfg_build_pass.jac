@@ -28,6 +28,7 @@ obj CFGBuildPass(UniPass) {
     def _collect_assigned_symbols(nd: uni.UniNode) -> set[str];
     def _is_break_stmt(nd: uni.UniNode) -> bool;
     def _is_continue_stmt(nd: uni.UniNode) -> bool;
+    def _is_in_loop_else(nd: uni.UniNode, loop_stmt: uni.UniCFGNode) -> bool;
     def enter_node(nd: uni.UniNode) -> None;
     def exit_node(nd: uni.UniNode) -> None;
     def after_pass -> None;

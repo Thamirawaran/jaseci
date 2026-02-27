@@ -5,6 +5,7 @@ with entry {
         if x == 2 { continue; }
         print(x);
         if x == 4 { break; }
+    } else {
+        print("done");
     }
-    y = 0;
 }

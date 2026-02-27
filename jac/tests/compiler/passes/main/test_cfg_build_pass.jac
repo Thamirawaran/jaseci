@@ -54,18 +54,18 @@ test "cfg return stmt" {
     assert dot == expected_dot;
 }
 
-test "cfg while loop with break and continue" {
+test "cfg while loop with break continue and else" {
     dot = cfg_dot_from_file(file_name=os.path.join(FIXTURES, "cfg_while_stmt.jac"));
     expected_dot = (
-        "digraph G {\n" + '  0 [label="BB0\\nx = 0 ;", shape=box];\n' + '  1 [label="BB1\\nwhile x < 5", shape=box];\n' + '  2 [label="BB2\\nx = x + 1 ;\\nif x == 2", shape=box];\n' + '  3 [label="BB3\\ncontinue ;", shape=box];\n' + '  4 [label="BB4\\nprint ( x ) ;\\nif x == 4", shape=box];\n' + '  5 [label="BB5\\nbreak ;", shape=box];\n' + '  6 [label="BB6\\ny = 0 ;", shape=box];\n' + "  0 -> 1;\n" + "  1 -> 2;\n" + "  1 -> 6;\n" + "  2 -> 3;\n" + "  2 -> 4;\n" + "  3 -> 1;\n" + "  4 -> 5;\n" + "  4 -> 1;\n" + "  5 -> 6;\n" + "}\n"
+        "digraph G {\n" + '  0 [label="BB0\\nx = 0 ;", shape=box];\n' + '  1 [label="BB1\\nwhile x < 5", shape=box];\n' + '  2 [label="BB2\\nx = x + 1 ;\\nif x == 2", shape=box];\n' + '  3 [label="BB3\\ncontinue ;", shape=box];\n' + '  4 [label="BB4\\nprint ( x ) ;\\nif x == 4", shape=box];\n' + '  5 [label="BB5\\nbreak ;", shape=box];\n' + '  6 [label="BB6\\nprint ( \\"done\\" ) ;", shape=box];\n' + "  0 -> 1;\n" + "  1 -> 2;\n" + "  1 -> 6;\n" + "  2 -> 3;\n" + "  2 -> 4;\n" + "  3 -> 1;\n" + "  4 -> 5;\n" + "  4 -> 1;\n" + "}\n"
     );
     assert dot == expected_dot;
 }
 
-test "cfg for loop with break and continue" {
+test "cfg for loop with break continue and else" {
     dot = cfg_dot_from_file(file_name=os.path.join(FIXTURES, "cfg_for_stmt.jac"));
     expected_dot = (
-        "digraph G {\n" + '  0 [label="BB0\\nfor i in range ( 0 , 5 )", shape=box];\n' + '  1 [label="BB1\\nif i == 1", shape=box];\n' + '  2 [label="BB2\\ncontinue ;", shape=box];\n' + '  3 [label="BB3\\nprint ( i ) ;\\nif i == 3", shape=box];\n' + '  4 [label="BB4\\nbreak ;", shape=box];\n' + '  5 [label="BB5\\ny = 0 ;", shape=box];\n' + "  0 -> 1;\n" + "  0 -> 5;\n" + "  1 -> 2;\n" + "  1 -> 3;\n" + "  2 -> 0;\n" + "  3 -> 4;\n" + "  3 -> 0;\n" + "  4 -> 5;\n" + "}\n"
+        "digraph G {\n" + '  0 [label="BB0\\nfor i in range ( 0 , 5 )", shape=box];\n' + '  1 [label="BB1\\nif i == 1", shape=box];\n' + '  2 [label="BB2\\ncontinue ;", shape=box];\n' + '  3 [label="BB3\\nprint ( i ) ;\\nif i == 3", shape=box];\n' + '  4 [label="BB4\\nbreak ;", shape=box];\n' + '  5 [label="BB5\\nprint ( \\"done\\" ) ;", shape=box];\n' + "  0 -> 1;\n" + "  0 -> 5;\n" + "  1 -> 2;\n" + "  1 -> 3;\n" + "  2 -> 0;\n" + "  3 -> 4;\n" + "  3 -> 0;\n" + "}\n"
     );
     assert dot == expected_dot;
 }
