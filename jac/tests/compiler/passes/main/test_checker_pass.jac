@@ -1752,6 +1752,25 @@ test "elif_chain_narrowing" {
     );
 }
 
+"""Test walrus operator (:=) type narrowing in conditions."""
+test "walrus_narrowing" {
+    program = JacProgram();
+    mod = program.compile(os.path.join(CHECKER_FIXTURES, "checker_walrus_narrowing.jac"));
+    TypeCheckPass(ir_in=mod, prog=program);
+
+    assert len(program.errors_had) == 1 , f"Expected 1 type error, but got " + f"{len(
+        program.errors_had
+    )}:\n" + "\n---\n".join(err.pretty_print() for err in program.errors_had);
+
+    assert_error_pretty_found(
+        """
+        c: Cat = x;  # <-- Error: Dog cannot assign to Cat
+        ^^^^^^^^^^^
+        """,
+        program.errors_had[0].pretty_print()
+    );
+}
+
 """Test assignment-based type narrowing."""
 test "assignment_narrowing" {
     program = JacProgram();

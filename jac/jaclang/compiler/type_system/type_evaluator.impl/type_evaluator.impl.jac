@@ -1672,6 +1672,29 @@ impl TypeEvaluator._classify_edge(
     return "unconditional";
 }
 
+"""Extract the narrowable symbol name from an expression.
+Handles plain Name, walrus (x := expr), and parenthesized walrus ((x := expr)).
+"""
+impl TypeEvaluator._extract_narrowing_name(expr: uni.Expr) -> str | None {
+    if isinstance(expr, uni.Name) {
+        return expr.value;
+    }
+    # Walrus: x := expr
+    if (
+        isinstance(expr, uni.BinaryExpr)
+        and isinstance(expr.op, uni.Token)
+        and expr.op.name == Tok.WALRUS_EQ
+        and isinstance(expr.left, uni.Name)
+    ) {
+        return expr.left.value;
+    }
+    # Parenthesized walrus: (x := expr)
+    if isinstance(expr, uni.AtomUnit) and isinstance(expr.value, uni.Expr) {
+        return self._extract_narrowing_name(expr.value);
+    }
+    return None;
+}
+
 """Push a new narrowing scope for if/AND blocks."""
 impl TypeEvaluator.push_narrowing_scope -> None {
     self._narrowing_scope_stack.append({});
@@ -1933,17 +1956,28 @@ impl TypeEvaluator._find_predicate_for(
 
         }
     }
-    # Pattern 4: isinstance(x, T) or isinstance(x, (A, B, C))
+    # Pattern 4: isinstance(x, T), isinstance(x, (A, B, C)), isinstance(x := expr, T)
     if (
         isinstance(condition, uni.FuncCall)
         and isinstance(condition.target, uni.Name)
         and condition.target.value == "isinstance"
         and len(condition.params) == 2
-        and isinstance(condition.params[0], uni.Name)
-        and not isinstance(condition.params[0], uni.KWPair)
         and not isinstance(condition.params[1], uni.KWPair)
     ) {
-        if condition.params[0].value == sym_name {
+        first_arg = condition.params[0];
+        # Extract the narrowed symbol name: either a plain Name or walrus target.
+        narrowed_name: str | None = None;
+        if isinstance(first_arg, uni.Name) and not isinstance(first_arg, uni.KWPair) {
+            narrowed_name = first_arg.value;
+        } elif (
+            isinstance(first_arg, uni.BinaryExpr)
+            and isinstance(first_arg.op, uni.Token)
+            and first_arg.op.name == Tok.WALRUS_EQ
+            and isinstance(first_arg.left, uni.Name)
+        ) {
+            narrowed_name = first_arg.left.value;
+        }
+        if narrowed_name is not None and narrowed_name == sym_name {
             type_arg = condition.params[1];
             # Check if it's a tuple of types: isinstance(x, (A, B, C))
             if isinstance(type_arg, uni.TupleVal) {
@@ -1977,15 +2011,15 @@ impl TypeEvaluator._find_predicate_for(
             }
         }
     }
-    # Pattern 5: x is None / x is not None
+    # Pattern 5: x is None / x is not None / (x := expr) is not None
     if (
         isinstance(condition, uni.CompareExpr)
         and len(condition.ops) == 1
         and len(condition.rights) == 1
-        and isinstance(condition.left, uni.Name)
         and isinstance(condition.rights[0], uni.Null)
     ) {
-        if condition.left.value == sym_name {
+        left_name = self._extract_narrowing_name(condition.left);
+        if left_name is not None and left_name == sym_name {
             op_name = condition.ops[0].name;
             if self.prefetch and self.prefetch.none_type_class {
                 none_inst = self._convert_to_instance(self.prefetch.none_type_class);
@@ -2006,9 +2040,9 @@ impl TypeEvaluator._find_predicate_for(
         isinstance(condition, uni.CompareExpr)
         and len(condition.ops) == 1
         and len(condition.rights) == 1
-        and isinstance(condition.left, uni.Name)
     ) {
-        if condition.left.value == sym_name {
+        left_name = self._extract_narrowing_name(condition.left);
+        if left_name is not None and left_name == sym_name {
             op_name = condition.ops[0].name;
             right_expr = condition.rights[0];
             # Check for literal values (String, Int, Float, Bool, etc.)

@@ -399,21 +399,32 @@ This enables Pyright-style optimization: skip branches where the symbol isn't af
 """
 impl CFGBuildPass._collect_narrowing_symbols(condition: uni.Expr) -> set[str] {
     symbols: set[str] = set();
-    # Pattern: isinstance(x, T) - collect 'x'
+    # Pattern: isinstance(x, T) or isinstance(x := expr, T) - collect 'x'
     if isinstance(condition, uni.FuncCall) {
         if (
             isinstance(condition.target, uni.Name)
             and condition.target.value == "isinstance"
             and len(condition.params) >= 1
-            and isinstance(condition.params[0], uni.Name)
         ) {
-            symbols.add(condition.params[0].value);
+            first_arg = condition.params[0];
+            if isinstance(first_arg, uni.Name) {
+                symbols.add(first_arg.value);
+            } elif self._is_walrus(first_arg) and isinstance(first_arg.left, uni.Name) {
+                symbols.add(first_arg.left.value);
+            }
         }
     }
-    # Pattern: x is None / x is not None - collect 'x'
+    # Pattern: x is None / (x := expr) is None - collect 'x'
     elif isinstance(condition, uni.CompareExpr) {
-        if isinstance(condition.left, uni.Name) {
-            symbols.add(condition.left.value);
+        left = condition.left;
+        if isinstance(left, uni.Name) {
+            symbols.add(left.value);
+        } elif isinstance(left, uni.AtomUnit) and self._is_walrus(left.value) {
+            if isinstance(left.value.left, uni.Name) {
+                symbols.add(left.value.left.value);
+            }
+        } elif self._is_walrus(left) and isinstance(left.left, uni.Name) {
+            symbols.add(left.left.value);
         }
     }
     # Pattern: not <condition> - recurse
@@ -435,7 +446,20 @@ impl CFGBuildPass._collect_narrowing_symbols(condition: uni.Expr) -> set[str] {
     elif isinstance(condition, uni.Name) {
         symbols.add(condition.value);
     }
+    # Pattern: x := expr (walrus truthiness) - collect 'x'
+    elif self._is_walrus(condition) and isinstance(condition.left, uni.Name) {
+        symbols.add(condition.left.value);
+    }
     return symbols;
+}
+
+"""Check if an expression is a walrus operator (:=)."""
+impl CFGBuildPass._is_walrus(expr: uni.Expr) -> bool {
+    return (
+        isinstance(expr, uni.BinaryExpr)
+        and isinstance(expr.op, uni.Token)
+        and expr.op.name == "WALRUS_EQ"
+    );
 }
 
 """Collect all symbols assigned in a statement (for affected_symbols tracking)."""

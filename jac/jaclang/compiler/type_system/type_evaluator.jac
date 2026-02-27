@@ -244,6 +244,7 @@ obj TypeEvaluator {
     ) -> TypeBase | None;
 
     def _classify_edge(pred: uni.IfStmt | uni.WhileStmt, succ: uni.UniCFGNode) -> str;
+    def _extract_narrowing_name(expr: uni.Expr) -> str | None;
     # --- Shared narrowing utilities ---
     def _find_predicate_for(
         symbol: uni.Symbol, condition: uni.Expr
