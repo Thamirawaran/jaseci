@@ -90,13 +90,13 @@ impl CoalesceBBPass.printgraph_cfg -> str {
 """Enter BasicBlockStmt nodes."""
 impl CoalesceBBPass.enter_node(nd: uni.UniNode) -> None {
     if (isinstance(nd, uni.UniCFGNode) and not isinstance(nd, uni.Semi)) {
-        tail = nd.get_tail();
-        bb = self.get_bb(nd);
         for bbs in self.basic_blocks.values() {
-            if (bbs['bb_stmts'] == bb) {
+            if (nd in bbs['bb_stmts']) {
                 return;
             }
         }
+        tail = nd.get_tail();
+        bb = self.get_bb(nd);
         self.basic_blocks[self.bb_counter] = {'bb_stmts': bb, 'bb_out': tail.bb_out};
         self.bb_counter += 1;
     }
@@ -161,9 +161,8 @@ impl CFGBuildPass.exit_node(nd: uni.UniNode) -> None {
         }
         if (isinstance(nd, (uni.InForStmt, uni.IterForStmt)) and self.for_loop_stack) {
             for from_node in self.for_loop_stack[-1][1:] {
-                self.link_bbs(from_node, nd);
-
                 if (from_node in self.to_connect) {
+                    self.link_bbs(from_node, nd);
                     self.to_connect.remove(from_node);
                 }
             }
@@ -171,9 +170,8 @@ impl CFGBuildPass.exit_node(nd: uni.UniNode) -> None {
             self.to_connect.append(nd);
         } elif (isinstance(nd, uni.WhileStmt) and self.while_loop_stack) {
             for from_node in self.while_loop_stack[-1][1:] {
-                self.link_bbs(from_node, nd);
-
                 if (from_node in self.to_connect) {
+                    self.link_bbs(from_node, nd);
                     self.to_connect.remove(from_node);
                 }
             }
