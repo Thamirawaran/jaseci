@@ -1,7 +1,8 @@
 with entry {
     for i in range(0, 5) {
-        x = i + 1;
-        print(x);
+        if i == 1 { continue; }
+        print(i);
+        if i == 3 { break; }
     }
     y = 0;
 }

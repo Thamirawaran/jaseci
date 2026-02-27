@@ -26,6 +26,8 @@ obj CFGBuildPass(UniPass) {
     # Pyright-style affected_symbols tracking
     def _collect_narrowing_symbols(condition: uni.Expr) -> set[str];
     def _collect_assigned_symbols(nd: uni.UniNode) -> set[str];
+    def _is_break_stmt(nd: uni.UniNode) -> bool;
+    def _is_continue_stmt(nd: uni.UniNode) -> bool;
     def enter_node(nd: uni.UniNode) -> None;
     def exit_node(nd: uni.UniNode) -> None;
     def after_pass -> None;

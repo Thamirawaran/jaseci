@@ -156,7 +156,10 @@ impl CFGBuildPass.after_pass -> None {
 impl CFGBuildPass.exit_node(nd: uni.UniNode) -> None {
     if (isinstance(nd, uni.UniCFGNode) and not isinstance(nd, uni.Semi)) {
         self.first_exit = True;
-        if (not nd.bb_out and not isinstance(nd, (uni.ReturnStmt, uni.ArchHas))) {
+        if (
+            not nd.bb_out
+            and not isinstance(nd, (uni.ReturnStmt, uni.ArchHas, uni.CtrlStmt))
+        ) {
             self.to_connect.append(nd);
         }
         if (isinstance(nd, (uni.InForStmt, uni.IterForStmt)) and self.for_loop_stack) {
@@ -166,6 +169,13 @@ impl CFGBuildPass.exit_node(nd: uni.UniNode) -> None {
                     self.to_connect.remove(from_node);
                 }
             }
+            for from_node in self.for_loop_stack[-1][1:] {
+                if self._is_break_stmt(from_node) {
+                    self.to_connect.append(from_node);
+                } elif self._is_continue_stmt(from_node) {
+                    self.link_bbs(from_node, nd);
+                }
+            }
             self.pop_loop_stack(nd);
             self.to_connect.append(nd);
         } elif (isinstance(nd, uni.WhileStmt) and self.while_loop_stack) {
@@ -173,6 +183,13 @@ impl CFGBuildPass.exit_node(nd: uni.UniNode) -> None {
                 if (from_node in self.to_connect) {
                     self.link_bbs(from_node, nd);
                     self.to_connect.remove(from_node);
+                }
+            }
+            for from_node in self.while_loop_stack[-1][1:] {
+                if self._is_break_stmt(from_node) {
+                    self.to_connect.append(from_node);
+                } elif self._is_continue_stmt(from_node) {
+                    self.link_bbs(from_node, nd);
                 }
             }
             self.pop_loop_stack(nd);
@@ -440,4 +457,14 @@ impl CFGBuildPass._collect_assigned_symbols(nd: uni.UniNode) -> set[str] {
         }
     }
     return symbols;
+}
+
+"""Check if a node is a break statement."""
+impl CFGBuildPass._is_break_stmt(nd: uni.UniNode) -> bool {
+    return isinstance(nd, uni.CtrlStmt) and nd.ctrl.value == "break";
+}
+
+"""Check if a node is a continue statement."""
+impl CFGBuildPass._is_continue_stmt(nd: uni.UniNode) -> bool {
+    return isinstance(nd, uni.CtrlStmt) and nd.ctrl.value == "continue";
 }
