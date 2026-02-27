@@ -11,6 +11,7 @@ This document provides a summary of new features, improvements, and bug fixes in
 - **Union Type Member Access**: `x.name` where `x: Dog | Cat` now resolves member types and enables go-to-definition.
 - **IDE Hover Types**: Function parameters and `has` vars now display types on hover.
 - **Structured GitHub Issue Forms**: Replaced blank markdown issue templates with guided YAML forms, making it easier to submit well-structured bug reports, feature requests, and docs issues.
+- - **CFG Improvement**: Fixed type narrowing not working correctly inside while loops, for loops with break/continue, and loop else blocks.
 
 ## jaclang 0.11.2 (Latest Release)
 
