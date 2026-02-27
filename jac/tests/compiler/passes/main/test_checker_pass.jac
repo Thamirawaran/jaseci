@@ -1733,6 +1733,25 @@ test "while_condition_narrowing" {
     );
 }
 
+"""Test ElseIf chain type narrowing with accumulated negative narrowing."""
+test "elif_chain_narrowing" {
+    program = JacProgram();
+    mod = program.compile(os.path.join(CHECKER_FIXTURES, "checker_elif_narrowing.jac"));
+    TypeCheckPass(ir_in=mod, prog=program);
+
+    assert len(program.errors_had) == 1 , f"Expected 1 type error, but got " + f"{len(
+        program.errors_had
+    )}:\n" + "\n---\n".join(err.pretty_print() for err in program.errors_had);
+
+    assert_error_pretty_found(
+        """
+        d: Dog = animal;  # <-- Error: Fish cannot assign to Dog
+        ^^^^^^^^^^^^^^^^
+        """,
+        program.errors_had[0].pretty_print()
+    );
+}
+
 """Test assignment-based type narrowing."""
 test "assignment_narrowing" {
     program = JacProgram();
