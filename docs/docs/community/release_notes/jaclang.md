@@ -5,6 +5,7 @@ This document provides a summary of new features, improvements, and bug fixes in
 ## jaclang 0.11.4 (Unreleased)
 
 - **Type System Improvement**: Fixed type narrowing not working correctly inside while loops, for loops with break/continue, and loop else blocks.
+- **Type Narrowing: while, elif, walrus**: Type narrowing now works inside `while` conditions (`while isinstance(x, Dog)`), elif chains, and walrus operator expressions (`isinstance(x := get(), Dog)`, `(val := get()) is not None`).
 
 ## jaclang 0.11.3 (Latest Release)
 
