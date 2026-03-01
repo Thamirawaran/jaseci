@@ -243,7 +243,7 @@ obj TypeEvaluator {
         symbol: uni.Symbol, stmt: uni.UniCFGNode, visited: set
     ) -> TypeBase | None;
 
-    def _classify_edge(pred: uni.IfStmt, succ: uni.UniCFGNode) -> str;
+    def _classify_edge(pred: uni.IfStmt | uni.WhileStmt, succ: uni.UniCFGNode) -> str;
     # --- Shared narrowing utilities ---
     def _find_predicate_for(
         symbol: uni.Symbol, condition: uni.Expr

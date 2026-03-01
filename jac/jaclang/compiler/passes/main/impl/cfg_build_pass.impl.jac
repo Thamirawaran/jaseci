@@ -214,7 +214,7 @@ impl CFGBuildPass.enter_node(nd: uni.UniNode) -> None {
         # Narrowing patterns: isinstance(x, T) → {'x'}, y is None → {'y'}, if z → {'z'}
         # Assignment patterns: a = 1 → {'a'}, for b in list → {'b'}
         # These enable skipping irrelevant branches during backward CFG walks.
-        if isinstance(nd, (uni.IfStmt, uni.ElseIf)) {
+        if isinstance(nd, (uni.IfStmt, uni.ElseIf, uni.WhileStmt)) {
             narrowing_syms = self._collect_narrowing_symbols(nd.condition);
             nd.affected_symbols.update(narrowing_syms);
         }

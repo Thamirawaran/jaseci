@@ -1481,7 +1481,9 @@ impl TypeEvaluator._compute_narrowed_at(
         return None;
     }
     # Ignore back-edges from loop body to preserve pre-loop narrowing.
-    is_loop_header: bool = isinstance(stmt, (uni.InForStmt, uni.IterForStmt));
+    is_loop_header: bool = isinstance(
+        stmt, (uni.InForStmt, uni.IterForStmt, uni.WhileStmt)
+    );
     incoming_types: list[TypeBase] = [];
     has_unnarrowed_pred: bool = False;
     for pred in stmt.bb_in {
@@ -1494,8 +1496,10 @@ impl TypeEvaluator._compute_narrowed_at(
             ancestor: uni.UniNode | None = None;
             if isinstance(stmt, uni.InForStmt) {
                 ancestor = pred.find_parent_of_type(uni.InForStmt);
-            } else {
+            } elif isinstance(stmt, uni.IterForStmt) {
                 ancestor = pred.find_parent_of_type(uni.IterForStmt);
+            } else {
+                ancestor = pred.find_parent_of_type(uni.WhileStmt);
             }
             if ancestor is stmt {
                 continue;
@@ -1514,8 +1518,9 @@ impl TypeEvaluator._compute_narrowed_at(
         pred_narrowed = self._compute_narrowed_at(symbol, pred, visited);
 
         # Check if predecessor is a conditional with a narrowing predicate.
-        # Note: ElseIf extends IfStmt, so this handles both.
-        if isinstance(pred, uni.IfStmt) {
+        # Note: ElseIf extends IfStmt, so isinstance(pred, uni.IfStmt) handles both.
+        # WhileStmt conditions also narrow inside the loop body (true branch).
+        if isinstance(pred, (uni.IfStmt, uni.WhileStmt)) {
             predicate = self._find_predicate_for(symbol, pred.condition);
             if predicate is not None {
                 edge_kind = self._classify_edge(pred, stmt);
@@ -1542,9 +1547,6 @@ impl TypeEvaluator._compute_narrowed_at(
                 }
             }
         }
-        # TODO: ElseIf (elif) narrowing needs CFG fix - predecessor nodes don't match.
-        # The CFG builds correct links but type checker sees different node instances.
-        # This is a future PR task.
 
         # Check if predecessor is an AssertStmt with isinstance narrowing.
         # assert isinstance(x, T) narrows x to T for subsequent statements.
@@ -1637,18 +1639,27 @@ impl TypeEvaluator._compute_narrowed_at(
     return result;
 }
 
-"""Classify a CFG edge from an IfStmt predecessor to a successor as true/false."""
-impl TypeEvaluator._classify_edge(pred: uni.IfStmt, succ: uni.UniCFGNode) -> str {
+"""Classify a CFG edge from a conditional predecessor to a successor as true/false."""
+impl TypeEvaluator._classify_edge(
+    pred: uni.IfStmt | uni.WhileStmt, succ: uni.UniCFGNode
+) -> str {
     # True branch: succ is the first statement in pred.body.
     if pred.body and succ is pred.body[0] {
         return "true";
     }
-    # False branch: ElseIf (which IS a CodeBlockStmt/UniCFGNode).
-    if isinstance(pred.else_body, uni.ElseIf) and succ is pred.else_body {
-        return "false";
+    # IfStmt-specific false branches (ElseIf, ElseStmt).
+    if isinstance(pred, uni.IfStmt) {
+        if isinstance(pred.else_body, uni.ElseIf) and succ is pred.else_body {
+            return "false";
+        }
+        if isinstance(pred.else_body, uni.ElseStmt) {
+            if pred.else_body.body and succ is pred.else_body.body[0] {
+                return "false";
+            }
+        }
     }
-    # False branch: ElseStmt (NOT a CFG node) -- edge goes to its body[0].
-    if isinstance(pred.else_body, uni.ElseStmt) {
+    # WhileStmt false branches (else clause or fall-through).
+    if isinstance(pred, uni.WhileStmt) and isinstance(pred.else_body, uni.ElseStmt) {
         if pred.else_body.body and succ is pred.else_body.body[0] {
             return "false";
         }
