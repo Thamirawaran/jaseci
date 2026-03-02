@@ -207,30 +207,21 @@ impl CFGBuildPass.exit_node(nd: uni.UniNode) -> None {
         ) {
             self.to_connect.append(nd);
         }
-        if (isinstance(nd, (uni.InForStmt, uni.IterForStmt)) and self.for_loop_stack) {
-            for from_node in self.for_loop_stack[-1][1:] {
-                if (from_node in self.to_connect) {
+        # For/while loop exit: identical logic, just different stacks.
+        loop_stack: list[list[uni.UniCFGNode]] | None = None;
+        if isinstance(nd, (uni.InForStmt, uni.IterForStmt)) and self.for_loop_stack {
+            loop_stack = self.for_loop_stack;
+        } elif isinstance(nd, uni.WhileStmt) and self.while_loop_stack {
+            loop_stack = self.while_loop_stack;
+        }
+        if loop_stack {
+            for from_node in loop_stack[-1][1:] {
+                if from_node in self.to_connect {
                     self.link_bbs(from_node, nd);
                     self.to_connect.remove(from_node);
                 }
             }
-            for from_node in self.for_loop_stack[-1][1:] {
-                if self._is_break_stmt(from_node) {
-                    self.to_connect.append(from_node);
-                } elif self._is_continue_stmt(from_node) {
-                    self.link_bbs(from_node, nd);
-                }
-            }
-            self.pop_loop_stack(nd);
-            self.to_connect.append(nd);
-        } elif (isinstance(nd, uni.WhileStmt) and self.while_loop_stack) {
-            for from_node in self.while_loop_stack[-1][1:] {
-                if (from_node in self.to_connect) {
-                    self.link_bbs(from_node, nd);
-                    self.to_connect.remove(from_node);
-                }
-            }
-            for from_node in self.while_loop_stack[-1][1:] {
+            for from_node in loop_stack[-1][1:] {
                 if self._is_break_stmt(from_node) {
                     self.to_connect.append(from_node);
                 } elif self._is_continue_stmt(from_node) {
@@ -246,12 +237,12 @@ impl CFGBuildPass.exit_node(nd: uni.UniNode) -> None {
                 }
             }
             self.ability_stack.pop();
-        } elif (isinstance(nd, (uni.IfStmt, uni.ElseIf)) and not nd.else_body) {
+        } elif (isinstance(nd, uni.IfStmt) and not nd.else_body) {
             self.to_connect.append(nd);
         }
         # Rewire CFG for short-circuit evaluation of and/or conditions.
         if (
-            isinstance(nd, (uni.IfStmt, uni.ElseIf, uni.WhileStmt))
+            isinstance(nd, (uni.IfStmt, uni.WhileStmt))
             and isinstance(nd.condition, uni.BoolExpr)
             and len(nd.condition.values) >= 2
         ) {
@@ -286,12 +277,7 @@ impl CFGBuildPass.enter_node(nd: uni.UniNode) -> None {
         # Narrowing patterns: isinstance(x, T) → {'x'}, y is None → {'y'}, if z → {'z'}
         # Assignment patterns: a = 1 → {'a'}, for b in list → {'b'}
         # These enable skipping irrelevant branches during backward CFG walks.
-        if isinstance(nd, (uni.IfStmt, uni.ElseIf)) {
-            narrowing_syms = self._collect_narrowing_symbols(nd.condition);
-            nd.affected_symbols.update(narrowing_syms);
-        }
-        # Assert statement: collect affected symbols from isinstance checks
-        if isinstance(nd, uni.AssertStmt) {
+        if isinstance(nd, (uni.IfStmt, uni.AssertStmt)) {
             narrowing_syms = self._collect_narrowing_symbols(nd.condition);
             nd.affected_symbols.update(narrowing_syms);
         }
@@ -375,21 +361,15 @@ impl CFGBuildPass.enter_node(nd: uni.UniNode) -> None {
 impl CFGBuildPass.get_code_block_sequence(
     nd: (uni.UniNode | None)
 ) -> (list[uni.UniCFGNode] | None) {
-    sequence: list[uni.UniCFGNode] = [];
-    if ((nd is not None) and nd?.body and isinstance(nd?.body, Sequence)) {
-        for bbs in nd.body {
-            if isinstance(bbs, uni.UniCFGNode) {
-                sequence.append(bbs);
-            }
-        }
-        if sequence {
-            return sequence;
-        } else {
-            return None;
-        }
-    } else {
+    if nd is None or not isinstance(nd?.body, Sequence) {
         return None;
     }
+    sequence = [
+        bbs
+        for bbs in nd.body
+        if isinstance(bbs, uni.UniCFGNode)
+    ];
+    return sequence or None;
 }
 
 """Link basic blocks."""
@@ -432,12 +412,9 @@ impl CFGBuildPass.get_parent_bb_stmt(nd: uni.UniCFGNode) -> (uni.UniCFGNode | No
 
 """Pop loop stack."""
 impl CFGBuildPass.pop_loop_stack(nd: uni.UniCFGNode) -> None {
-    if (isinstance(nd, uni.WhileStmt) and (len(self.while_loop_stack) > 0)) {
+    if isinstance(nd, uni.WhileStmt) and self.while_loop_stack {
         self.while_loop_stack.pop();
-    } elif (
-        isinstance(nd, (uni.InForStmt, uni.IterForStmt))
-        and (len(self.for_loop_stack) > 0)
-    ) {
+    } elif (isinstance(nd, (uni.InForStmt, uni.IterForStmt)) and self.for_loop_stack) {
         self.for_loop_stack.pop();
     }
 }
