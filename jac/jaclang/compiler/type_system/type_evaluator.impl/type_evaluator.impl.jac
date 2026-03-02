@@ -1521,13 +1521,23 @@ impl TypeEvaluator._compute_narrowed_at(
         # Check if predecessor is a conditional with a narrowing predicate.
         # Note: ElseIf extends IfStmt, so this handles both.
         if isinstance(pred, uni.IfStmt) {
-            # For rewired short-circuit: IfStmt only evaluates values[0].
-            if (isinstance(pred.condition, uni.BoolExpr) and pred.condition.bb_out) {
-                cond_values = pred.condition.values;
-                predicate = self._find_predicate_for(symbol, cond_values[0]);
-            } else {
-                predicate = self._find_predicate_for(symbol, pred.condition);
+            # For rewired short-circuit: drill through nested BoolExpr
+            # to find the innermost first operand this node evaluates.
+            cond = pred.condition;
+            inner = cond;
+            while isinstance(inner, uni.AtomUnit) {
+                inner = inner.value;
             }
+            if isinstance(inner, uni.BoolExpr) and inner.bb_out {
+                cond = inner;
+                while isinstance(cond, uni.BoolExpr) and cond.bb_out {
+                    cond = cond.values[0];
+                    while isinstance(cond, uni.AtomUnit) {
+                        cond = cond.value;
+                    }
+                }
+            }
+            predicate = self._find_predicate_for(symbol, cond);
             if predicate is not None {
                 edge_kind = self._classify_edge(pred, stmt);
                 if edge_kind in ("true", "false") {
