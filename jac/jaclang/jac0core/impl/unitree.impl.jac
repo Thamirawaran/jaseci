@@ -2106,6 +2106,7 @@ impl BoolExpr.init(
     self.op = op;
     UniNode.init(self, kid=kid);
     Expr.init(self);
+    UniCFGNode.init(self);
 }
 
 impl LambdaExpr.init(

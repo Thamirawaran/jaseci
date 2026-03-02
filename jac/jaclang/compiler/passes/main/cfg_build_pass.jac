@@ -29,6 +29,10 @@ obj CFGBuildPass(UniPass) {
     def _is_break_stmt(nd: uni.UniNode) -> bool;
     def _is_continue_stmt(nd: uni.UniNode) -> bool;
     def _is_in_loop_else(nd: uni.UniNode, loop_stmt: uni.UniCFGNode) -> bool;
+    def _rewire_short_circuit(
+        branch_node: uni.UniCFGNode, bool_expr: uni.BoolExpr
+    ) -> None;
+
     def enter_node(nd: uni.UniNode) -> None;
     def exit_node(nd: uni.UniNode) -> None;
     def after_pass -> None;

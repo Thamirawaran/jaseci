@@ -1191,7 +1191,7 @@ class CompareExpr(Expr) {
 }
 
 """BoolExpr node type for Jac Ast."""
-class BoolExpr(Expr) {
+class BoolExpr(Expr, UniCFGNode) {
     def init(
         self: BoolExpr, op: Token, values: list[Expr], kid: Sequence[UniNode]
     ) -> None;

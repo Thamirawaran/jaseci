@@ -1308,7 +1308,7 @@ test "type_narrowing" {
         ^^^^^^^^^^^^^^^^^^^^^^
         """,
         """
-        to_connect.append(nd);  # <-- Error: BaseNode cannot assign to CFGNode
+        to_connect.append(nd);  # <-- Ok after narrowing
                           ^^
         """
     ];

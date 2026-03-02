@@ -1521,22 +1521,18 @@ impl TypeEvaluator._compute_narrowed_at(
         # Check if predecessor is a conditional with a narrowing predicate.
         # Note: ElseIf extends IfStmt, so this handles both.
         if isinstance(pred, uni.IfStmt) {
-            predicate = self._find_predicate_for(symbol, pred.condition);
+            # For rewired short-circuit: IfStmt only evaluates values[0].
+            if (isinstance(pred.condition, uni.BoolExpr) and pred.condition.bb_out) {
+                cond_values = pred.condition.values;
+                predicate = self._find_predicate_for(symbol, cond_values[0]);
+            } else {
+                predicate = self._find_predicate_for(symbol, pred.condition);
+            }
             if predicate is not None {
                 edge_kind = self._classify_edge(pred, stmt);
-                if edge_kind == "true" {
+                if edge_kind in ("true", "false") {
                     narrowed = self._apply_narrowing(
-                        predicate, pred_narrowed, True, symbol
-                    );
-                    if narrowed is not None {
-                        incoming_types.append(narrowed);
-                    } else {
-                        has_unnarrowed_pred = True;
-                    }
-                    continue;
-                } elif edge_kind == "false" {
-                    narrowed = self._apply_narrowing(
-                        predicate, pred_narrowed, False, symbol
+                        predicate, pred_narrowed, edge_kind == "true", symbol
                     );
                     if narrowed is not None {
                         incoming_types.append(narrowed);
@@ -1547,9 +1543,33 @@ impl TypeEvaluator._compute_narrowed_at(
                 }
             }
         }
-        # TODO: ElseIf (elif) narrowing needs CFG fix - predecessor nodes don't match.
-        # The CFG builds correct links but type checker sees different node instances.
-        # This is a future PR task.
+        # Check if predecessor is a BoolExpr (short-circuit evaluation node).
+        # BoolExpr evaluates values[1:] (remaining operands after the first).
+        if isinstance(pred, uni.BoolExpr) and pred.bb_out {
+            remaining = pred.values[1:];
+            if len(remaining) == 1 {
+                predicate = self._find_predicate_for(symbol, remaining[0]);
+            } else {
+                predicate = self._find_predicate_for(symbol, pred);
+            }
+            if predicate is not None {
+                parent_branch = pred.find_parent_of_type(uni.IfStmt);
+                if parent_branch is not None {
+                    edge_kind = self._classify_edge(parent_branch, stmt);
+                    if edge_kind in ("true", "false") {
+                        narrowed = self._apply_narrowing(
+                            predicate, pred_narrowed, edge_kind == "true", symbol
+                        );
+                        if narrowed is not None {
+                            incoming_types.append(narrowed);
+                        } else {
+                            has_unnarrowed_pred = True;
+                        }
+                        continue;
+                    }
+                }
+            }
+        }
 
         # Check if predecessor is an AssertStmt with isinstance narrowing.
         # assert isinstance(x, T) narrows x to T for subsequent statements.
@@ -1644,6 +1664,20 @@ impl TypeEvaluator._compute_narrowed_at(
 
 """Classify a CFG edge from an IfStmt predecessor to a successor as true/false."""
 impl TypeEvaluator._classify_edge(pred: uni.IfStmt, succ: uni.UniCFGNode) -> str {
+    # Short-circuit: edge from rewired IfStmt to its BoolExpr condition.
+    if (
+        isinstance(pred.condition, uni.BoolExpr)
+        and pred.condition.bb_out
+        and succ is pred.condition
+    ) {
+        # AND: first operand true → continue evaluating remaining.
+        # OR: first operand false → continue evaluating remaining.
+        if pred.condition.op.name == "KW_AND" {
+            return "true";
+        } else {
+            return "false";
+        }
+    }
     # True branch: succ is the first statement in pred.body.
     if pred.body and succ is pred.body[0] {
         return "true";
