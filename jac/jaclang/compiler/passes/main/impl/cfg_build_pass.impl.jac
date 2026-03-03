@@ -166,6 +166,13 @@ impl CoalesceBBPass.enter_node(nd: uni.UniNode) -> None {
                 return;
             }
         }
+        # Wired BoolExpr nodes are branch points in short-circuit evaluation.
+        # Each must be its own BB — don't coalesce with neighbors.
+        if isinstance(nd, uni.BoolExpr) {
+            self.basic_blocks[self.bb_counter] = {'bb_stmts': [nd], 'bb_out': nd.bb_out};
+            self.bb_counter += 1;
+            return;
+        }
         tail = nd.get_tail();
         bb = self.get_bb(nd);
         self.basic_blocks[self.bb_counter] = {'bb_stmts': bb, 'bb_out': tail.bb_out};
