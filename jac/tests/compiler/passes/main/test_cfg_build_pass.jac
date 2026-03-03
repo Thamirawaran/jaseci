@@ -69,3 +69,11 @@ test "cfg for loop with break continue and else" {
     );
     assert dot == expected_dot;
 }
+
+test "cfg bool expr short circuit" {
+    dot = cfg_dot_from_file(file_name=os.path.join(FIXTURES, "cfg_bool_expr.jac"));
+    expected_dot = (
+        "digraph G {\n" + '  0 [label="BB0\\nx = 5 ;\\nif x > 10", shape=box];\n' + '  1 [label="BB1\\nand x < 20", shape=box];\n' + '  2 [label="BB2\\nprint ( \\"x is between 10 and 20\\" ) ;", shape=box];\n' + '  3 [label="BB3\\nelif x > 5", shape=box];\n' + '  4 [label="BB4\\nor x == 5", shape=box];\n' + '  5 [label="BB5\\nprint ( \\"x is greater than or equal to 5\\" ) ;", shape=box];\n' + '  6 [label="BB6\\nprint ( \\"x is less than 5\\" ) ;", shape=box];\n' + "  0 -> 1;\n" + "  0 -> 3;\n" + "  1 -> 2;\n" + "  1 -> 3;\n" + "  3 -> 5;\n" + "  3 -> 4;\n" + "  4 -> 5;\n" + "  4 -> 6;\n" + "}\n"
+    );
+    assert dot == expected_dot;
+}

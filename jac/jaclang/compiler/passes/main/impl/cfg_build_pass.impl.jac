@@ -41,10 +41,25 @@ impl CoalesceBBPass.printgraph_cfg -> str {
     }
     for (key, bb) in cfg.items() {
         for (i, bbs) in enumerate(bb['bb_stmts']) {
-            if isinstance(bbs, uni.ElseIf) {
-                cfg[key]['bb_stmts'][i] = 'elif ' + bbs.condition.unparse();
-            } elif isinstance(bbs, uni.IfStmt) {
-                cfg[key]['bb_stmts'][i] = 'if ' + bbs.condition.unparse();
+            if isinstance(bbs, uni.IfStmt) {
+                prefix = 'elif ' if isinstance(bbs, uni.ElseIf) else 'if ';
+                # Drill through nested short-circuited BoolExpr to find
+                # the innermost first operand that this node evaluates.
+                cond = bbs.condition;
+                inner = cond;
+                while isinstance(inner, uni.AtomUnit) {
+                    inner = inner.value;
+                }
+                if isinstance(inner, uni.BoolExpr) and inner.bb_out {
+                    cond = inner;
+                    while isinstance(cond, uni.BoolExpr) and cond.bb_out {
+                        cond = cond.values[0];
+                        while isinstance(cond, uni.AtomUnit) {
+                            cond = cond.value;
+                        }
+                    }
+                }
+                cfg[key]['bb_stmts'][i] = prefix + cond.unparse();
             } elif isinstance(bbs, uni.ElseStmt) {
                 cfg[key]['bb_stmts'][i] = 'else';
             } elif isinstance(bbs, uni.Archetype) {
@@ -62,7 +77,29 @@ impl CoalesceBBPass.printgraph_cfg -> str {
                         'for ' + bbs.iter.unparse() + bbs.condition.unparse() + bbs.count_by.unparse()
                     );
             } elif isinstance(bbs, uni.WhileStmt) {
-                cfg[key]['bb_stmts'][i] = 'while ' + bbs.condition.unparse();
+                cond = bbs.condition;
+                inner = cond;
+                while isinstance(inner, uni.AtomUnit) {
+                    inner = inner.value;
+                }
+                if isinstance(inner, uni.BoolExpr) and inner.bb_out {
+                    cond = inner;
+                    while isinstance(cond, uni.BoolExpr) and cond.bb_out {
+                        cond = cond.values[0];
+                        while isinstance(cond, uni.AtomUnit) {
+                            cond = cond.value;
+                        }
+                    }
+                }
+                cfg[key]['bb_stmts'][i] = 'while ' + cond.unparse();
+            } elif isinstance(bbs, uni.BoolExpr) {
+                op_str = 'and' if bbs.op.name == 'KW_AND' else 'or';
+                remaining = bbs.values[1:];
+                cfg[key]['bb_stmts'][i] = (
+                    op_str + ' ' + (' ' + op_str + ' ').join(
+                        [v.unparse() for v in remaining]
+                    )
+                );
             } else {
                 cfg[key]['bb_stmts'][i] = bbs.unparse();
             }
@@ -90,6 +127,10 @@ impl CoalesceBBPass.printgraph_cfg -> str {
 """Enter BasicBlockStmt nodes."""
 impl CoalesceBBPass.enter_node(nd: uni.UniNode) -> None {
     if (isinstance(nd, uni.UniCFGNode) and not isinstance(nd, uni.Semi)) {
+        # Skip BoolExpr nodes that aren't wired into the CFG.
+        if isinstance(nd, uni.BoolExpr) and not nd.bb_out {
+            return;
+        }
         for bbs in self.basic_blocks.values() {
             if (nd in bbs['bb_stmts']) {
                 return;
@@ -145,6 +186,33 @@ impl CFGBuildPass.after_pass -> None {
                     if body_seq and nd in body_seq {
                         continue;
                     }
+                    # If parent_bb was rewired for short-circuit evaluation,
+                    # nodes inside its else_body are already connected via
+                    # BoolExpr — skip direct linking to avoid duplicate edges.
+                    parent_cond = parent_bb.condition
+                        if isinstance(parent_bb, uni.IfStmt)
+                        else None;
+                    while isinstance(parent_cond, uni.AtomUnit) {
+                        parent_cond = parent_cond.value;
+                    }
+                    if (
+                        isinstance(parent_cond, uni.BoolExpr)
+                        and parent_cond.bb_out
+                        and parent_bb.else_body
+                    ) {
+                        cur = nd.parent;
+                        in_else = False;
+                        while cur and cur is not parent_bb {
+                            if cur is parent_bb.else_body {
+                                in_else = True;
+                                break;
+                            }
+                            cur = cur.parent;
+                        }
+                        if in_else {
+                            continue;
+                        }
+                    }
                     self.link_bbs(parent_bb, nd);
                 }
             }
@@ -155,6 +223,10 @@ impl CFGBuildPass.after_pass -> None {
 """Exit BasicBlockStmt nodes."""
 impl CFGBuildPass.exit_node(nd: uni.UniNode) -> None {
     if (isinstance(nd, uni.UniCFGNode) and not isinstance(nd, uni.Semi)) {
+        # Skip BoolExpr — handled by _rewire_short_circuit in parent's exit.
+        if isinstance(nd, uni.BoolExpr) {
+            return;
+        }
         self.first_exit = True;
         if (
             not nd.bb_out
@@ -162,30 +234,21 @@ impl CFGBuildPass.exit_node(nd: uni.UniNode) -> None {
         ) {
             self.to_connect.append(nd);
         }
-        if (isinstance(nd, (uni.InForStmt, uni.IterForStmt)) and self.for_loop_stack) {
-            for from_node in self.for_loop_stack[-1][1:] {
-                if (from_node in self.to_connect) {
+        # For/while loop exit: identical logic, just different stacks.
+        loop_stack: list[list[uni.UniCFGNode]] | None = None;
+        if isinstance(nd, (uni.InForStmt, uni.IterForStmt)) and self.for_loop_stack {
+            loop_stack = self.for_loop_stack;
+        } elif isinstance(nd, uni.WhileStmt) and self.while_loop_stack {
+            loop_stack = self.while_loop_stack;
+        }
+        if loop_stack {
+            for from_node in loop_stack[-1][1:] {
+                if from_node in self.to_connect {
                     self.link_bbs(from_node, nd);
                     self.to_connect.remove(from_node);
                 }
             }
-            for from_node in self.for_loop_stack[-1][1:] {
-                if self._is_break_stmt(from_node) {
-                    self.to_connect.append(from_node);
-                } elif self._is_continue_stmt(from_node) {
-                    self.link_bbs(from_node, nd);
-                }
-            }
-            self.pop_loop_stack(nd);
-            self.to_connect.append(nd);
-        } elif (isinstance(nd, uni.WhileStmt) and self.while_loop_stack) {
-            for from_node in self.while_loop_stack[-1][1:] {
-                if (from_node in self.to_connect) {
-                    self.link_bbs(from_node, nd);
-                    self.to_connect.remove(from_node);
-                }
-            }
-            for from_node in self.while_loop_stack[-1][1:] {
+            for from_node in loop_stack[-1][1:] {
                 if self._is_break_stmt(from_node) {
                     self.to_connect.append(from_node);
                 } elif self._is_continue_stmt(from_node) {
@@ -201,8 +264,19 @@ impl CFGBuildPass.exit_node(nd: uni.UniNode) -> None {
                 }
             }
             self.ability_stack.pop();
-        } elif (isinstance(nd, (uni.IfStmt, uni.ElseIf)) and not nd.else_body) {
+        } elif (isinstance(nd, uni.IfStmt) and not nd.else_body) {
             self.to_connect.append(nd);
+        }
+        # Rewire CFG for short-circuit evaluation of and/or conditions.
+        # Unwrap AtomUnit (parenthesized expressions) to find BoolExpr.
+        if isinstance(nd, (uni.IfStmt, uni.WhileStmt)) {
+            cond = nd.condition;
+            while isinstance(cond, uni.AtomUnit) {
+                cond = cond.value;
+            }
+            if isinstance(cond, uni.BoolExpr) and len(cond.values) >= 2 {
+                self._rewire_short_circuit(nd, cond);
+            }
         }
     }
     # MatchCase: Clear to_connect of nodes from sibling cases.
@@ -224,16 +298,16 @@ impl CFGBuildPass.exit_node(nd: uni.UniNode) -> None {
 """Enter BasicBlockStmt nodes."""
 impl CFGBuildPass.enter_node(nd: uni.UniNode) -> None {
     if (isinstance(nd, uni.UniCFGNode) and not isinstance(nd, uni.Semi)) {
+        # Skip BoolExpr nodes — they will be wired into the CFG
+        # during exit_node via _rewire_short_circuit.
+        if isinstance(nd, uni.BoolExpr) {
+            return;
+        }
         # Collect symbols that THIS node directly affects (Pyright-style optimization).
         # Narrowing patterns: isinstance(x, T) → {'x'}, y is None → {'y'}, if z → {'z'}
         # Assignment patterns: a = 1 → {'a'}, for b in list → {'b'}
         # These enable skipping irrelevant branches during backward CFG walks.
-        if isinstance(nd, (uni.IfStmt, uni.ElseIf)) {
-            narrowing_syms = self._collect_narrowing_symbols(nd.condition);
-            nd.affected_symbols.update(narrowing_syms);
-        }
-        # Assert statement: collect affected symbols from isinstance checks
-        if isinstance(nd, uni.AssertStmt) {
+        if isinstance(nd, (uni.IfStmt, uni.AssertStmt)) {
             narrowing_syms = self._collect_narrowing_symbols(nd.condition);
             nd.affected_symbols.update(narrowing_syms);
         }
@@ -317,38 +391,26 @@ impl CFGBuildPass.enter_node(nd: uni.UniNode) -> None {
 impl CFGBuildPass.get_code_block_sequence(
     nd: (uni.UniNode | None)
 ) -> (list[uni.UniCFGNode] | None) {
-    sequence: list[uni.UniCFGNode] = [];
-    if ((nd is not None) and nd?.body and isinstance(nd?.body, Sequence)) {
-        for bbs in nd.body {
-            if isinstance(bbs, uni.UniCFGNode) {
-                sequence.append(bbs);
-            }
-        }
-        if sequence {
-            return sequence;
-        } else {
-            return None;
-        }
-    } else {
+    if nd is None or not isinstance(nd?.body, Sequence) {
         return None;
     }
+    sequence = [
+        bbs
+        for bbs in nd.body
+        if isinstance(bbs, uni.UniCFGNode)
+    ];
+    return sequence or None;
 }
 
 """Link basic blocks."""
 impl CFGBuildPass.link_bbs(source: uni.UniCFGNode, target: uni.UniCFGNode) -> None {
     if (source and target) {
-        if target in (source.bb_out or []) {
+        if target in source.bb_out {
             return;
         }
-        if source.bb_out {
-            source.bb_out.append(target);
-        } else {
-            source.bb_out = [target];
-        }
-        if target.bb_in {
+        source.bb_out.append(target);
+        if source not in target.bb_in {
             target.bb_in.append(source);
-        } else {
-            target.bb_in = [source];
         }
         # Propagate affected_symbols from parent (source) to child (target) in CFG.
         # Collection (enter_node) captures what each node DIRECTLY affects.
@@ -380,12 +442,9 @@ impl CFGBuildPass.get_parent_bb_stmt(nd: uni.UniCFGNode) -> (uni.UniCFGNode | No
 
 """Pop loop stack."""
 impl CFGBuildPass.pop_loop_stack(nd: uni.UniCFGNode) -> None {
-    if (isinstance(nd, uni.WhileStmt) and (len(self.while_loop_stack) > 0)) {
+    if isinstance(nd, uni.WhileStmt) and self.while_loop_stack {
         self.while_loop_stack.pop();
-    } elif (
-        isinstance(nd, (uni.InForStmt, uni.IterForStmt))
-        and (len(self.for_loop_stack) > 0)
-    ) {
+    } elif (isinstance(nd, (uni.InForStmt, uni.IterForStmt)) and self.for_loop_stack) {
         self.for_loop_stack.pop();
     }
 }
@@ -507,4 +566,99 @@ impl CFGBuildPass._is_in_loop_else(nd: uni.UniNode, loop_stmt: uni.UniCFGNode) -
         cur = cur.parent;
     }
     return False;
+}
+
+"""Rewire CFG edges for short-circuit evaluation of BoolExpr conditions.
+
+For 'if A and B': IfStmt(A?) ->true-> BoolExpr(B?) ->true-> body
+                   IfStmt(A?) ->false-> else, BoolExpr(B?) ->false-> else
+
+For 'if A or B':  IfStmt(A?) ->true-> body
+                   IfStmt(A?) ->false-> BoolExpr(B?) ->true-> body
+                   BoolExpr(B?) ->false-> else
+"""
+impl CFGBuildPass._rewire_short_circuit(
+    branch_node: uni.UniCFGNode,
+    bool_expr: uni.BoolExpr,
+    true_targets: list[uni.UniCFGNode] | None = None,
+    false_targets: list[uni.UniCFGNode] | None = None
+) -> None {
+    values = bool_expr.values;
+    if len(values) < 2 {
+        return;
+    }
+    is_and = bool_expr.op.name == "KW_AND";
+
+    # On initial call, detect targets from branch_node's current edges.
+    if true_targets is None or false_targets is None {
+        true_targets = [];
+        false_targets = [];
+        for target in branch_node.bb_out {
+            if branch_node?.body and target is branch_node.body[0] {
+                true_targets.append(target);
+            } else {
+                false_targets.append(target);
+            }
+        }
+    }
+
+    # Clear existing edges from branch_node.
+    for target in list(branch_node.bb_out) {
+        if branch_node in target.bb_in {
+            target.bb_in.remove(branch_node);
+        }
+    }
+    branch_node.bb_out.clear();
+
+    # Set up narrowing symbols on the BoolExpr node.
+    for val in values[1:] {
+        bool_expr.affected_symbols.update(self._collect_narrowing_symbols(val));
+    }
+    bool_expr.affected_symbols.update(branch_node.affected_symbols);
+
+    # Wire branch_node: AND → true goes to bool_expr, OR → false goes to bool_expr.
+    if is_and {
+        self.link_bbs(branch_node, bool_expr);
+        for ft in false_targets {
+            self.link_bbs(branch_node, ft);
+        }
+    } else {
+        for tt in true_targets {
+            self.link_bbs(branch_node, tt);
+        }
+        self.link_bbs(branch_node, bool_expr);
+    }
+
+    # BoolExpr connects to both true and false targets in both cases.
+    for tt in true_targets {
+        self.link_bbs(bool_expr, tt);
+    }
+    for ft in false_targets {
+        self.link_bbs(bool_expr, ft);
+    }
+
+    # Handle no-else case: BoolExpr needs future connection.
+    if not false_targets {
+        # OR: branch_node's false now goes to bool_expr, so remove it.
+        if not is_and and branch_node in self.to_connect {
+            self.to_connect.remove(branch_node);
+        }
+        self.to_connect.append(bool_expr);
+    }
+
+    # Recursively handle nested BoolExpr in values[0] (e.g., (A and B) and C).
+    # After wiring above, branch_node "evaluates" values[0]. If that wraps
+    # another BoolExpr, split it further into the chain.
+    first_val = values[0];
+    while isinstance(first_val, uni.AtomUnit) {
+        first_val = first_val.value;
+    }
+    if isinstance(first_val, uni.BoolExpr) and len(first_val.values) >= 2 {
+        # The "result" of evaluating values[0] feeds into:
+        #   AND: true exit → bool_expr, false exit → false_targets
+        #   OR:  true exit → true_targets, false exit → bool_expr
+        nested_true = [bool_expr] if is_and else list(true_targets);
+        nested_false = list(false_targets) if is_and else [bool_expr];
+        self._rewire_short_circuit(branch_node, first_val, nested_true, nested_false);
+    }
 }

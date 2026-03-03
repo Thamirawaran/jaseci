@@ -1739,10 +1739,21 @@ impl ConcurrentExpr.postinit(self: ConcurrentExpr) -> None {
     Expr.postinit(self);
 }
 
+<<<<<<< shortcrt
+impl BoolExpr.init(
+    self: BoolExpr, op: Token, values: list[Expr], kid: Sequence[UniNode]
+) -> None {
+    self.values = values;
+    self.op = op;
+    UniNode.init(self, kid=kid);
+    Expr.init(self);
+    UniCFGNode.init(self);
+=======
 
 impl BinaryExpr.postinit(self: BinaryExpr) -> None {
     UniNode.postinit(self);
     Expr.postinit(self);
+>>>>>>> main
 }
 
 
