@@ -640,13 +640,18 @@ impl CFGBuildPass._rewire_short_circuit(
     branch_node: uni.UniCFGNode,
     bool_expr: uni.BoolExpr,
     true_targets: list[uni.UniCFGNode] | None = None,
-    false_targets: list[uni.UniCFGNode] | None = None
+    false_targets: list[uni.UniCFGNode] | None = None,
+    parent_is_and: (bool | None) = None
 ) -> None {
     values = bool_expr.values;
     if len(values) < 2 {
         return;
     }
     is_and = bool_expr.op.name == "KW_AND";
+    # branch_is_and controls how branch_node connects TO bool_expr.
+    # When a parent passes its operator (e.g., AND chain ending with an OR),
+    # the branch wiring follows the parent's semantics, not the inner's.
+    branch_is_and = parent_is_and if parent_is_and is not None else is_and;
 
     # On initial call, detect targets from branch_node's current edges.
     if true_targets is None or false_targets is None {
@@ -675,8 +680,8 @@ impl CFGBuildPass._rewire_short_circuit(
     }
     bool_expr.affected_symbols.update(branch_node.affected_symbols);
 
-    # Wire branch_node: AND → true goes to bool_expr, OR → false goes to bool_expr.
-    if is_and {
+    # Wire branch_node using branch_is_and (parent's operator when overridden).
+    if branch_is_and {
         self.link_bbs(branch_node, bool_expr);
         for ft in false_targets {
             self.link_bbs(branch_node, ft);
@@ -698,7 +703,7 @@ impl CFGBuildPass._rewire_short_circuit(
 
     # Handle no-else case: BoolExpr needs future connection.
     if not false_targets {
-        if not is_and and branch_node in self.to_connect {
+        if not branch_is_and and branch_node in self.to_connect {
             self.to_connect.remove(branch_node);
         }
         self.to_connect.append(bool_expr);
@@ -722,8 +727,15 @@ impl CFGBuildPass._rewire_short_circuit(
         last_val = last_val.value;
     }
     if isinstance(last_val, uni.BoolExpr) and len(last_val.values) >= 2 {
+        # When there are intermediate values (len > 2), the parent's operator
+        # determines how bool_expr connects to last_val. When last_val is the
+        # ONLY remaining (len == 2), bool_expr "becomes" the inner BoolExpr.
         self._rewire_short_circuit(
-            bool_expr, last_val, list(true_targets), list(false_targets)
+            bool_expr,
+            last_val,
+            list(true_targets),
+            list(false_targets),
+            parent_is_and=is_and if len(values) > 2 else None
         );
     }
 }

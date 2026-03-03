@@ -33,7 +33,8 @@ obj CFGBuildPass(UniPass) {
         branch_node: uni.UniCFGNode,
         bool_expr: uni.BoolExpr,
         true_targets: list[uni.UniCFGNode] | None = None,
-        false_targets: list[uni.UniCFGNode] | None = None
+        false_targets: list[uni.UniCFGNode] | None = None,
+        parent_is_and: (bool | None) = None
     ) -> None;
 
     def enter_node(nd: uni.UniNode) -> None;
