@@ -90,6 +90,10 @@ impl CoalesceBBPass.printgraph_cfg -> str {
 """Enter BasicBlockStmt nodes."""
 impl CoalesceBBPass.enter_node(nd: uni.UniNode) -> None {
     if (isinstance(nd, uni.UniCFGNode) and not isinstance(nd, uni.Semi)) {
+        # Skip BoolExpr nodes that aren't wired into the CFG.
+        if isinstance(nd, uni.BoolExpr) and not nd.bb_out {
+            return;
+        }
         for bbs in self.basic_blocks.values() {
             if (nd in bbs['bb_stmts']) {
                 return;
@@ -155,6 +159,10 @@ impl CFGBuildPass.after_pass -> None {
 """Exit BasicBlockStmt nodes."""
 impl CFGBuildPass.exit_node(nd: uni.UniNode) -> None {
     if (isinstance(nd, uni.UniCFGNode) and not isinstance(nd, uni.Semi)) {
+        # Skip BoolExpr — handled by _rewire_short_circuit in parent's exit.
+        if isinstance(nd, uni.BoolExpr) {
+            return;
+        }
         self.first_exit = True;
         if (
             not nd.bb_out
@@ -224,6 +232,11 @@ impl CFGBuildPass.exit_node(nd: uni.UniNode) -> None {
 """Enter BasicBlockStmt nodes."""
 impl CFGBuildPass.enter_node(nd: uni.UniNode) -> None {
     if (isinstance(nd, uni.UniCFGNode) and not isinstance(nd, uni.Semi)) {
+        # Skip BoolExpr nodes — they will be wired into the CFG
+        # during exit_node via _rewire_short_circuit.
+        if isinstance(nd, uni.BoolExpr) {
+            return;
+        }
         # Collect symbols that THIS node directly affects (Pyright-style optimization).
         # Narrowing patterns: isinstance(x, T) → {'x'}, y is None → {'y'}, if z → {'z'}
         # Assignment patterns: a = 1 → {'a'}, for b in list → {'b'}
