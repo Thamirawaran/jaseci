@@ -1119,7 +1119,7 @@ obj CompareExpr(Expr) {
 }
 
 """BoolExpr node type for Jac Ast."""
-obj BoolExpr(Expr) {
+obj BoolExpr(Expr, UniCFGNode) {
     has op: Token,
         values: list[Expr];
 

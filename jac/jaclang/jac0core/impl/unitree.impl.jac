@@ -1755,6 +1755,7 @@ impl CompareExpr.postinit(self: CompareExpr) -> None {
 impl BoolExpr.postinit(self: BoolExpr) -> None {
     UniNode.postinit(self);
     Expr.postinit(self);
+    UniCFGNode.postinit(self);
 }
 
 
