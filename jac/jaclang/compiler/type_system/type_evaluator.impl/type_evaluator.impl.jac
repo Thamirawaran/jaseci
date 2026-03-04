@@ -386,10 +386,11 @@ impl TypeEvaluator._get_type_of_expression_core(expr: uni.Expr) -> TypeBase {
                 # (same shared as Callable) and the target name is "Union" or "Optional".
                 if (
                     isinstance(base_type, types.ClassType)
+                    and base_type.shared is not None
+                    and base_type.shared.is_builtin_class
                     and self.prefetch
                     and self.prefetch.callable_class
                     and isinstance(self.prefetch.callable_class, types.ClassType)
-                    and base_type.shared is not None
                     and base_type.shared == self.prefetch.callable_class.shared
                 ) {
                     target_name: str | None = None;
