@@ -517,7 +517,7 @@ test "decorated test blocks" {
     mod = JacProgram().parse_str(source, "test.jac");
     t = mod.body[0];
     assert isinstance(t, uni.Test);
-    assert t.decorators is None;
+    assert not t.decorators;
 }
 
 with entry {
