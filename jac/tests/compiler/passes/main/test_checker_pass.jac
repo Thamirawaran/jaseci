@@ -1801,4 +1801,21 @@ test "union_and_optional_special_forms" {
     """,
         program.errors_had[2].pretty_print()
     );
+
+"""Test __getattr__ support: dynamic attrs use __getattr__ return type."""
+test "getattr_support" {
+    program = JacProgram();
+    path = os.path.join(FIXTURES, "checker_getattr_support.jac");
+    mod = program.compile(path);
+    TypeCheckPass(ir_in=mod, prog=program);
+
+    user_errors = [
+        err
+        for err in program.errors_had
+        if "vendor" not in err.loc.mod_path and "typeshed" not in err.loc.mod_path
+    ];
+
+    # Expect 1 error: assigning str to int (proves __getattr__ return type is enforced)
+    assert len(user_errors) == 1 , f"Expected 1 error, got {len(user_errors)}";
+    assert "Cannot assign" in user_errors[0].pretty_print();
 }

@@ -4,9 +4,8 @@ This document provides a summary of new features, improvements, and bug fixes in
 
 ## jaclang 0.11.4 (Unreleased)
 
-- 9 small refactors/changes.
-- 11 small refactors/changes.
-- 13 small refactors/changes.
+- **Fix: Type Checker Support for `__getattr__`**: Classes defining `__getattr__` no longer produce false "has no attribute" errors. Dynamic attribute access now correctly resolves to the `__getattr__` return type, and `Any` is callable (enabling proxy patterns like `console.error("msg")`). IDE hover shows dynamic attributes as `(dynamic attribute) name: type`.
+- 15 small refactors/changes.
 - **HMR Terminal Output Cleanup**: Styled HMR logs with `console.success/error/warning` and stripped absolute paths from compile errors.
 - **Fix: Implicit `run` Not Detecting Flags Before Filename**: `jac --autonative file.jac` failed to insert the implicit `run` subcommand because the detection only checked if the first argument was a `.jac` file. Now scans all arguments for a `.jac`/`.py` file, so flags like `--autonative` and `--no-cache` before the filename are correctly passed through to `jac run`.
 - **Unified JIR Cache: Single Binary Cache File Per Module**: Introduced JIR (Jac IR), a compact binary format that unifies all per-module caches -- type-checked AST, bytecode, MTIR, LLVM IR, and interop metadata -- into a single `.jir` file under `~/.cache/jac/jir/`. The format uses a 32-byte header, zlib-compressed AST payload, and optional TLV sections for each artifact type. On subsequent `jac check` or `jac run` invocations, cached modules are deserialized directly instead of being re-parsed, scope-built, and type-inferred, yielding **1.8-2.5x speedup on real compiler files**. Cache entries are invalidated automatically via mtime comparison against source, impl, and variant files. The old `DiskBytecodeCache` and `precompiled.jac` mechanisms have been removed in favor of this single unified format. A new `jac gen-jir-registry` command (itself a Jac module) auto-generates the 141-type node registry used for binary serialization, with a `--verify` mode for CI enforcement.
@@ -31,6 +30,7 @@ This document provides a summary of new features, improvements, and bug fixes in
 - **Fix: IDE Hover Types for Comprehension Variables**: Iteration variables in comprehensions (`p` in `[x for p in pool]`, `any(... for p in pool)`) now display their inferred type on hover.
 - **Fix: `Union[]` and `Optional[]` Special Forms**: `Union[int, str]` and `Optional[str]` from `typing` now work correctly for type checking, narrowing.
 - **Fix: `py2jac` BinOp operator precedence**: `(a - b - c) // 2` was incorrectly converted to `a - b - c // 2`. Fixed by wrapping same-op chains in `AtomUnit` so parent operators bind to the whole group.
+- **New: jacpretty**: Implment an new library for enhanced CLI colors and designs.
 
 ## jaclang 0.11.3 (Latest Release)
 
