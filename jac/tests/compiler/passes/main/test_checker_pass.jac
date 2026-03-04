@@ -1801,6 +1801,7 @@ test "union_and_optional_special_forms" {
     """,
         program.errors_had[2].pretty_print()
     );
+}
 
 """Test __getattr__ support: dynamic attrs use __getattr__ return type."""
 test "getattr_support" {
