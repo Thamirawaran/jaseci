@@ -32,6 +32,7 @@ This document provides a summary of new features, improvements, and bug fixes in
 - **Fix: `Union[]` and `Optional[]` Special Forms**: `Union[int, str]` and `Optional[str]` from `typing` now work correctly for type checking, narrowing.
 - **Fix: `py2jac` BinOp operator precedence**: `(a - b - c) // 2` was incorrectly converted to `a - b - c // 2`. Fixed by wrapping same-op chains in `AtomUnit` so parent operators bind to the whole group.
 - **New: jacpretty**: Implment an new library for enhanced CLI colors and designs.
+- **New: Decorator Support on `test` Blocks**: `test` blocks now accept decorators using the same `@decorator` syntax as abilities. Example: `@skip @timeout(5000) test "slow operation" { ... }`. This enables patterns like `@skip`, `@timeout`, `@tag`, or any custom decorator on tests.
 
 ## jaclang 0.11.3 (Latest Release)
 
