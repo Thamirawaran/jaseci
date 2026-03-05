@@ -155,6 +155,23 @@ def collect_narrowing_symbols(condition: uni.Expr) -> set[str] {
     return symbols;
 }
 
+"""Build a dotted key from an expression for narrowing lookups.
+
+Returns "x" for Name, "x.foo.bar" for attribute chains, None otherwise.
+"""
+def get_expr_key(expr: uni.Expr) -> str | None {
+    if isinstance(expr, uni.Name) {
+        return expr.value;
+    }
+    if isinstance(expr, uni.AtomTrailer) and expr.is_attr {
+        base_key = get_expr_key(expr.target);
+        if base_key and isinstance(expr.right, uni.Name) {
+            return f"{base_key}.{expr.right.value}";
+        }
+    }
+    return None;
+}
+
 """Collect all symbols assigned/bound in a statement.
 
 Extracted from CFGBuildPass._collect_assigned_symbols.
@@ -162,11 +179,15 @@ Handles assignments, for-loops, and walrus operators.
 """
 def collect_assigned_symbols(nd: uni.UniNode) -> set[str] {
     symbols: set[str] = set();
-    # Assignment: x = ...
+    # Assignment: x = ... or obj.field = ...
     if isinstance(nd, uni.Assignment) {
         for target in nd.target {
             if isinstance(target, uni.Name) {
                 symbols.add(target.value);
+            } elif isinstance(target, uni.AtomTrailer) and target.is_attr {
+                if key := get_expr_key(target) {
+                    symbols.add(key);
+                }
             }
         }
     }

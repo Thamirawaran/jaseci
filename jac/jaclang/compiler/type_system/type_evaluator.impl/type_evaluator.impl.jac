@@ -149,6 +149,8 @@ impl TypeEvaluator._get_type_of_expression_core(expr: uni.Expr) -> TypeBase {
                 full_narrowed: TypeBase | None = None;
                 if full_key := self.get_narrowing_key(expr) {
                     full_narrowed = self.get_scope_narrowing(full_key);
+                    # Also try CFG-based narrowing for attribute assignments
+                    # e.g., obj.value = 42; use(obj.value) → narrowed to int
                 }
                 # Member lookup on (narrowed) base type
                 assert isinstance(expr.right, uni.Name);
@@ -296,6 +298,18 @@ impl TypeEvaluator._get_type_of_expression_core(expr: uni.Expr) -> TypeBase {
                         #
                         # expr_type = self._set_symbol_to_expr(expr.right, member.symbol);
                         member.symbol.add_use(expr.right);
+                        # Try CFG-based attribute assignment narrowing if no scope narrowing.
+                        # Skip when expr is the target of an assignment (use declared type).
+                        if not full_narrowed
+                        and full_key
+                        and not (
+                            isinstance(expr.parent, uni.Assignment)
+                            and expr in expr.parent.target
+                        ) {
+                            full_narrowed = self.get_attr_narrowed_type(
+                                full_key, member_ty, expr
+                            );
+                        }
                         # Use narrowed type for hover/IDE if available, otherwise declared type
                         expr.right.type = full_narrowed or overloaded_ty or member_ty;
                         return expr.right.type;
@@ -1730,6 +1744,78 @@ impl TypeEvaluator.get_narrowed_type(
     } finally {
         self._narrowing_in_progress.discard(sym_id);
     }
+}
+
+"""CFG-based narrowing for attribute assignments (e.g., obj.value = 42).
+
+Walks backward through the CFG looking for assignments whose target
+matches the dotted attr_key (e.g., "obj.value"). Condition-based
+narrowing for attributes is already handled by scope-based narrowing,
+so this method only checks assignment patterns.
+"""
+impl TypeEvaluator.get_attr_narrowed_type(
+    attr_key: str, declared_type: TypeBase, at_node: uni.UniNode
+) -> TypeBase | None {
+    if not isinstance(declared_type, (types.UnionType, types.ClassType)) {
+        return None;
+    }
+    stmt: uni.CodeBlockStmt | None = None;
+    if isinstance(at_node, uni.CodeBlockStmt) {
+        stmt = at_node;
+    } else {
+        stmt = at_node.find_parent_of_type(uni.CodeBlockStmt);
+    }
+    if stmt is None {
+        return None;
+    }
+    # Simple backward walk: find the nearest assignment to this attr_key.
+    visited: set = set();
+    queue: list = [stmt];
+    while queue {
+        current = queue.pop();
+        current_id = id(current);
+        if current_id in visited {
+            continue;
+        }
+        if len(visited) > 32 {
+            return None;
+        }
+        visited.add(current_id);
+        if not current.bb_in {
+            return None;  # Reached entry with no assignment found
+
+        }
+        for pred in current.bb_in {
+            if id(pred) in visited {
+                continue;
+            }
+            # Check if predecessor assigns to this attribute key.
+            if isinstance(pred, uni.Assignment) and pred.value {
+                for target in pred.target {
+                    target_key = self.get_narrowing_key(target);
+                    if target_key == attr_key {
+                        assigned_type = self.get_type_of_expression(pred.value);
+                        if (
+                            assigned_type
+                            and not isinstance(assigned_type, types.UnknownType)
+                            and self.assign_type(assigned_type, declared_type)
+                            and not self.assign_type(declared_type, assigned_type)
+                        ) {
+                            return assigned_type;
+                        }
+                        return None;  # Found assignment but not narrower
+
+                    }
+                }
+            }
+            # Skip branches where this key is not affected.
+            if attr_key not in pred.affected_symbols {
+                continue;
+            }
+            queue.append(pred);
+        }
+    }
+    return None;
 }
 
 """Demand-driven backward CFG walk to compute narrowed type at a statement.

@@ -1743,6 +1743,19 @@ test "assignment_narrowing" {
     )}:\n" + "\n---\n".join(err.pretty_print() for err in program.errors_had);
 }
 
+"""Test attribute assignment-based type narrowing."""
+test "attr_assignment_narrowing" {
+    program = JacProgram();
+    mod = program.compile(
+        os.path.join(CHECKER_FIXTURES, "checker_attr_assignment_narrowing.jac")
+    );
+    TypeCheckPass(ir_in=mod, prog=program);
+
+    assert len(program.errors_had) == 0 , f"Expected 0 type errors, but got " + f"{len(
+        program.errors_had
+    )}:\n" + "\n---\n".join(err.pretty_print() for err in program.errors_had);
+}
+
 """Test truthiness guard narrowing for member access."""
 test "guard_narrowing" {
     program = JacProgram();
