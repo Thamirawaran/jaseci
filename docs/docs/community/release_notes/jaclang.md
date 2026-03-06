@@ -5,6 +5,7 @@ This document provides a summary of new features, improvements, and bug fixes in
 ## jaclang 0.12.1 (Unreleased)
 
 - **Fix: Union Type Member Access Errors**: `x.attr` on a union type now errors when the attribute is missing from any variant (previously silently returned `UnknownType`). Reports which variant(s) lack the attribute.
+- **Fix: `jac format --lintfix` File Deletion on Parse Errors**: Fixed a critical bug where `jac format --lintfix` would completely wipe out file contents when encountering parse errors. The formatter now preserves the original file when parse/lex errors are present, while still allowing files with type errors (but valid syntax) to be formatted normally. Added a safety check in `format_single_file()` that prevents writing empty formatted output to disk.
 
 ## jaclang 0.12.0 (Latest Release)
 
