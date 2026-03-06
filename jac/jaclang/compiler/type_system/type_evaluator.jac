@@ -257,13 +257,12 @@ obj TypeEvaluator {
     def get_narrowing_key(expr: uni.Expr) -> str | None;
     def process_condition(condition: uni.Expr) -> None;
     # --- CFG-based narrowing (backward traversal) ---
-    def get_narrowed_type(symbol: uni.Symbol, at_node: uni.UniNode) -> TypeBase | None;
-    def get_attr_narrowed_type(
-        attr_key: str, declared_type: TypeBase, at_node: uni.UniNode
+    def get_narrowed_type(
+        symbol: uni.Symbol, at_node: uni.UniNode, narrowing_key: str = ""
     ) -> TypeBase | None;
 
     def _compute_narrowed_at(
-        symbol: uni.Symbol, stmt: uni.UniCFGNode, visited: set
+        symbol: uni.Symbol, stmt: uni.UniCFGNode, visited: set, narrowing_key: str = ""
     ) -> TypeBase | None;
 
     def _classify_edge(pred: uni.IfStmt, succ: uni.UniCFGNode) -> str;

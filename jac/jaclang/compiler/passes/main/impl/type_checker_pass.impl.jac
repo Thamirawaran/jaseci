@@ -137,6 +137,15 @@ impl TypeCheckPass.exit_assignment(self: TypeCheckPass, nd: uni.Assignment) -> N
             left_type = self.evaluator.get_type_of_symbol(target.sym);
             # Cache the type on the Name node for hover info
             target.type = left_type;
+        } elif isinstance(target, uni.AtomTrailer) and target.is_attr {
+            # Attribute target: evaluate to resolve symbols, then use declared
+            # field type (not narrowed) for assignment validation.
+            self.evaluator.get_type_of_expression(target);
+            if isinstance(target.right, uni.AstSymbolNode) and target.right.sym {
+                left_type = self.evaluator.get_type_of_symbol(target.right.sym);
+            } else {
+                left_type = self.evaluator.get_type_of_expression(target);
+            }
         } elif isinstance(target, (uni.TupleVal, uni.ListVal)) {
             # Tuple/list unpacking: (px, py) = p; or [a, b] = lst;
             self._eval_unpacking_names(target);

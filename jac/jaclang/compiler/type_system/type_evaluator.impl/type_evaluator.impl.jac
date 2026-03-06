@@ -149,8 +149,6 @@ impl TypeEvaluator._get_type_of_expression_core(expr: uni.Expr) -> TypeBase {
                 full_narrowed: TypeBase | None = None;
                 if full_key := self.get_narrowing_key(expr) {
                     full_narrowed = self.get_scope_narrowing(full_key);
-                    # Also try CFG-based narrowing for attribute assignments
-                    # e.g., obj.value = 42; use(obj.value) → narrowed to int
                 }
                 # Member lookup on (narrowed) base type
                 assert isinstance(expr.right, uni.Name);
@@ -299,15 +297,10 @@ impl TypeEvaluator._get_type_of_expression_core(expr: uni.Expr) -> TypeBase {
                         # expr_type = self._set_symbol_to_expr(expr.right, member.symbol);
                         member.symbol.add_use(expr.right);
                         # Try CFG-based attribute assignment narrowing if no scope narrowing.
-                        # Skip when expr is the target of an assignment (use declared type).
-                        if not full_narrowed
-                        and full_key
-                        and not (
-                            isinstance(expr.parent, uni.Assignment)
-                            and expr in expr.parent.target
-                        ) {
-                            full_narrowed = self.get_attr_narrowed_type(
-                                full_key, member_ty, expr
+                        # Uses the unified get_narrowed_type with the dotted key (e.g., "obj.value").
+                        if not full_narrowed and full_key {
+                            full_narrowed = self.get_narrowed_type(
+                                member.symbol, expr, narrowing_key=full_key
                             );
                         }
                         # Use narrowed type for hover/IDE if available, otherwise declared type
@@ -1706,9 +1699,15 @@ impl TypeEvaluator.init(program: "JacProgram") -> None {
 # Type narrowing support (CFG-based, flow-sensitive)
 # Pyright-style implementation with affected_symbols optimization.
 # -------------------------------------------------------------------------
-"""Entry point: get the CFG-based narrowed type for a symbol at a given AST node."""
+"""Entry point: get the CFG-based narrowed type for a symbol at a given AST node.
+
+When narrowing_key is provided (e.g., "obj.value" for attribute access),
+it is used instead of symbol.sym_name for matching assignment targets
+in the backward CFG walk. This unifies narrowing for both simple names
+and dotted attribute paths through a single code path.
+"""
 impl TypeEvaluator.get_narrowed_type(
-    symbol: uni.Symbol, at_node: uni.UniNode
+    symbol: uni.Symbol, at_node: uni.UniNode, narrowing_key: str = ""
 ) -> TypeBase | None {
     sym_id = id(symbol);
     # Reentrancy guard: Skip if we're already computing narrowing for THIS symbol.
@@ -1740,82 +1739,10 @@ impl TypeEvaluator.get_narrowed_type(
     # Mark this symbol as in-progress before computing narrowing.
     self._narrowing_in_progress.add(sym_id);
     try {
-        return self._compute_narrowed_at(symbol, stmt, set());
+        return self._compute_narrowed_at(symbol, stmt, set(), narrowing_key);
     } finally {
         self._narrowing_in_progress.discard(sym_id);
     }
-}
-
-"""CFG-based narrowing for attribute assignments (e.g., obj.value = 42).
-
-Walks backward through the CFG looking for assignments whose target
-matches the dotted attr_key (e.g., "obj.value"). Condition-based
-narrowing for attributes is already handled by scope-based narrowing,
-so this method only checks assignment patterns.
-"""
-impl TypeEvaluator.get_attr_narrowed_type(
-    attr_key: str, declared_type: TypeBase, at_node: uni.UniNode
-) -> TypeBase | None {
-    if not isinstance(declared_type, (types.UnionType, types.ClassType)) {
-        return None;
-    }
-    stmt: uni.CodeBlockStmt | None = None;
-    if isinstance(at_node, uni.CodeBlockStmt) {
-        stmt = at_node;
-    } else {
-        stmt = at_node.find_parent_of_type(uni.CodeBlockStmt);
-    }
-    if stmt is None {
-        return None;
-    }
-    # Simple backward walk: find the nearest assignment to this attr_key.
-    visited: set = set();
-    queue: list = [stmt];
-    while queue {
-        current = queue.pop();
-        current_id = id(current);
-        if current_id in visited {
-            continue;
-        }
-        if len(visited) > 32 {
-            return None;
-        }
-        visited.add(current_id);
-        if not current.bb_in {
-            return None;  # Reached entry with no assignment found
-
-        }
-        for pred in current.bb_in {
-            if id(pred) in visited {
-                continue;
-            }
-            # Check if predecessor assigns to this attribute key.
-            if isinstance(pred, uni.Assignment) and pred.value {
-                for target in pred.target {
-                    target_key = self.get_narrowing_key(target);
-                    if target_key == attr_key {
-                        assigned_type = self.get_type_of_expression(pred.value);
-                        if (
-                            assigned_type
-                            and not isinstance(assigned_type, types.UnknownType)
-                            and self.assign_type(assigned_type, declared_type)
-                            and not self.assign_type(declared_type, assigned_type)
-                        ) {
-                            return assigned_type;
-                        }
-                        return None;  # Found assignment but not narrower
-
-                    }
-                }
-            }
-            # Skip branches where this key is not affected.
-            if attr_key not in pred.affected_symbols {
-                continue;
-            }
-            queue.append(pred);
-        }
-    }
-    return None;
 }
 
 """Demand-driven backward CFG walk to compute narrowed type at a statement.
@@ -1823,9 +1750,9 @@ Uses Pyright-style affected_symbols optimization to skip branches where
 the symbol is not narrowed or assigned.
 """
 impl TypeEvaluator._compute_narrowed_at(
-    symbol: uni.Symbol, stmt: uni.UniCFGNode, visited: set
+    symbol: uni.Symbol, stmt: uni.UniCFGNode, visited: set, narrowing_key: str = ""
 ) -> TypeBase | None {
-    sym_name = symbol.sym_name;
+    sym_name = narrowing_key or symbol.sym_name;
     cache_key = (id(stmt), sym_name);
     if cache_key in self._narrowing_cache {
         return self._narrowing_cache[cache_key];
@@ -1878,7 +1805,7 @@ impl TypeEvaluator._compute_narrowed_at(
         }
 
         # Recursively get predecessor's narrowed type.
-        pred_narrowed = self._compute_narrowed_at(symbol, pred, visited);
+        pred_narrowed = self._compute_narrowed_at(symbol, pred, visited, narrowing_key);
 
         # Check if predecessor is a conditional with a narrowing predicate.
         # Note: ElseIf extends IfStmt, so this handles both.
@@ -1931,21 +1858,18 @@ impl TypeEvaluator._compute_narrowed_at(
 
         # Check if predecessor is an Assignment that assigns to this symbol.
         # a: int | None = None; a = 90; -> narrows 'a' to int
+        # Also handles attribute assignments: obj.value = 42 -> narrows 'obj.value'
         # Only narrow if the assigned type is strictly narrower than the declared type.
         if isinstance(pred, uni.Assignment) and pred.value {
             found_assignment = False;
             for target in pred.target {
-                if isinstance(target, uni.Name) and target.value == sym_name {
-                    # Get the type of the assigned value
+                # Match by name ("x") or by dotted key ("obj.value")
+                target_key = self.get_narrowing_key(target);
+                if target_key == sym_name {
                     assigned_type = self.get_type_of_expression(pred.value);
                     if assigned_type
                     and not isinstance(assigned_type, types.UnknownType) {
                         declared_type = self.get_type_of_symbol(symbol);
-                        # Only narrow if:
-                        # 1. assigned_type is assignable to declared_type (valid assignment)
-                        # 2. declared_type is NOT assignable to assigned_type (narrowing, not equivalent)
-                        # This ensures we only narrow for cases like int|None -> int,
-                        # not for cases like list[int] -> list[] (which would widen).
                         if (
                             self.assign_type(assigned_type, declared_type)
                             and not self.assign_type(declared_type, assigned_type)
