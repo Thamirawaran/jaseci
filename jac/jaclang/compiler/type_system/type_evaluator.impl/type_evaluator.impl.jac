@@ -538,7 +538,9 @@ impl TypeEvaluator._get_type_of_expression_core(expr: uni.Expr) -> TypeBase {
                     self.add_diagnostic(
                         expr.right,
                         f'Cannot access attribute "{expr.right.value}" for type '
-                        f'"{base_type}"; attribute is missing from {", ".join(missing_types)}'
+                        f'"{base_type}"; attribute is missing from {", ".join(
+                            missing_types
+                        )}'
                     );
                     return types.UnknownType();
                 }
