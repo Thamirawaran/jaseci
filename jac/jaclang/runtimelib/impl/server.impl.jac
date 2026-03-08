@@ -794,14 +794,14 @@ impl ModuleIntrospector.introspect_walker(
 """Ensure client bundle is available and return hash."""
 impl ModuleIntrospector.ensure_bundle -> str {
     if not self._module {
-        raise RuntimeError('Module not loaded') ;
+        raise RuntimeError('Module not loaded');
     }
     if self._bundle {
         return self._bundle.hash;
     }
     # Don't retry if we already have a cached error
     if self._bundle_error {
-        raise ClientBundleError(self._bundle_error) ;
+        raise ClientBundleError(self._bundle_error);
     }
     try {
         self._bundle = self._bundle_builder.build(self._module);
@@ -810,7 +810,7 @@ impl ModuleIntrospector.ensure_bundle -> str {
     } except Exception as exc {
         self._bundle = None;
         self._bundle_error = str(exc);
-        raise ClientBundleError(self._bundle_error) ;
+        raise ClientBundleError(self._bundle_error);
     }
 }
 
@@ -1215,6 +1215,7 @@ impl JacAPIServer.postinit -> None {
     # Only create real server if port > 0 (port=0 is test mode - no socket binding)
     if self.port > 0 {
         self.server = Jac.create_server(self, '0.0.0.0', self.port);
+        # Note: Jac.create_server updates self.port if a different port was used
     } else {
         self.server = None;
     }
@@ -1720,7 +1721,7 @@ impl JacAPIServer.print_endpoint_docs -> None {
 impl JacAPIServer.start(
     dev: bool = False,
     no_client: bool = False,
-    on_ready: Callable[[], None] | None = None
+    on_ready: Callable[[int], None] | None = None
 ) -> None {
     import from pathlib { Path }
     self.introspector.load();
@@ -1813,9 +1814,14 @@ impl JacAPIServer.start(
             );
             console.print(file=sys.stderr);
         }
-        # Call the ready callback (e.g., to print startup banner)
+        # Call the ready callback with actual port (e.g., to print startup banner)
+        # Try new signature (with port) first, fall back to old signature for cached code
         if on_ready {
-            on_ready();
+            try {
+                on_ready(self.port);
+            } except TypeError {
+                on_ready();
+            }
         }
         try {
             httpd.serve_forever();

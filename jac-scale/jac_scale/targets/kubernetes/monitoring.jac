@@ -24,18 +24,9 @@ Kubernetes metrics are collected via:
   - kube-state-metrics: exposes K8s object state (pods, deployments, replicas, restarts)
   - node-exporter:      exposes host-level metrics (CPU, memory, disk, network)
 """
-class MonitoringDeployer {
+obj MonitoringDeployer {
     has k8s_config: KubernetesConfig,
         logger: (Logger | None) = None;
-
-    def init(
-        self: MonitoringDeployer,
-        k8s_config: KubernetesConfig,
-        logger: (Logger | None) = None
-    ) -> None {
-        self.k8s_config = k8s_config;
-        self.logger = logger;
-    }
 
     """Deploy Prometheus ConfigMap with scrape config + Deployment + ClusterIP Service.
 
@@ -45,12 +36,7 @@ class MonitoringDeployer {
       - node-exporter for host-level node metrics (CPU, memory, disk, network)
     """
     def _deploy_prometheus(
-        self: MonitoringDeployer,
-        app_name: str,
-        namespace: str,
-        apps_v1: Any,
-        core_v1: Any,
-        cluster_env: str
+        app_name: str, namespace: str, apps_v1: Any, core_v1: Any, cluster_env: str
     ) -> None {
         prometheus_name = f"{app_name}-prometheus";
         ksm_name = f"{app_name}-kube-state-metrics";
@@ -110,7 +96,7 @@ class MonitoringDeployer {
                     namespace=namespace, body=prometheus_configmap
                 );
             } else {
-                raise ;
+                raise;
             }
         }
 
@@ -176,7 +162,7 @@ class MonitoringDeployer {
                     namespace=namespace, body=prometheus_deployment
                 );
             } else {
-                raise ;
+                raise;
             }
         }
 
@@ -205,7 +191,7 @@ class MonitoringDeployer {
                     namespace=namespace, body=prometheus_service
                 );
             } else {
-                raise ;
+                raise;
             }
         }
 
@@ -221,11 +207,7 @@ class MonitoringDeployer {
     A ClusterRole is required so it can list/watch cluster-wide resources.
     """
     def _deploy_kube_state_metrics(
-        self: MonitoringDeployer,
-        app_name: str,
-        namespace: str,
-        apps_v1: Any,
-        core_v1: Any
+        app_name: str, namespace: str, apps_v1: Any, core_v1: Any
     ) -> None {
         ksm_name = f"{app_name}-kube-state-metrics";
         ksm_sa_name = f"{ksm_name}-sa";
@@ -254,7 +236,7 @@ class MonitoringDeployer {
                     namespace=namespace, body=sa_body
                 );
             } else {
-                raise ;
+                raise;
             }
         }
 
@@ -320,7 +302,7 @@ class MonitoringDeployer {
             if e.status == 404 {
                 rbac_v1.create_cluster_role(body=cluster_role_body);
             } else {
-                raise ;
+                raise;
             }
         }
 
@@ -347,7 +329,7 @@ class MonitoringDeployer {
             if e.status == 404 {
                 rbac_v1.create_cluster_role_binding(body=crb_body);
             } else {
-                raise ;
+                raise;
             }
         }
 
@@ -399,7 +381,7 @@ class MonitoringDeployer {
                     namespace=namespace, body=ksm_deployment
                 );
             } else {
-                raise ;
+                raise;
             }
         }
 
@@ -435,7 +417,7 @@ class MonitoringDeployer {
                     namespace=namespace, body=ksm_service
                 );
             } else {
-                raise ;
+                raise;
             }
         }
 
@@ -453,11 +435,7 @@ class MonitoringDeployer {
     to it correctly.
     """
     def _deploy_node_exporter(
-        self: MonitoringDeployer,
-        app_name: str,
-        namespace: str,
-        apps_v1: Any,
-        core_v1: Any
+        app_name: str, namespace: str, apps_v1: Any, core_v1: Any
     ) -> None {
         ne_name = f"{app_name}-node-exporter";
 
@@ -481,8 +459,7 @@ class MonitoringDeployer {
                                 'image': 'prom/node-exporter:v1.10.2',
                                 'args': [
                                     '--path.procfs=/host/proc',
-                                    '--path.sysfs=/host/sys',
-                                    '--path.rootfs=/host/root'
+                                    '--path.sysfs=/host/sys'
                                 ],
                                 'ports': [{'containerPort': 9100, 'name': 'metrics'}],
                                 'volumeMounts': [
@@ -495,20 +472,13 @@ class MonitoringDeployer {
                                         'name': 'sys',
                                         'mountPath': '/host/sys',
                                         'readOnly': True
-                                    },
-                                    {
-                                        'name': 'root',
-                                        'mountPath': '/host/root',
-                                        'readOnly': True,
-                                        'mountPropagation': 'HostToContainer'
                                     }
                                 ]
                             }
                         ],
                         'volumes': [
                             {'name': 'proc', 'hostPath': {'path': '/proc'}},
-                            {'name': 'sys', 'hostPath': {'path': '/sys'}},
-                            {'name': 'root', 'hostPath': {'path': '/'}}
+                            {'name': 'sys', 'hostPath': {'path': '/sys'}}
                         ]
                     }
                 }
@@ -522,7 +492,7 @@ class MonitoringDeployer {
                     namespace=namespace, body=ne_daemonset
                 );
             } else {
-                raise ;
+                raise;
             }
         }
 
@@ -556,7 +526,7 @@ class MonitoringDeployer {
             if e.status == 404 {
                 core_v1.create_namespaced_service(namespace=namespace, body=ne_service);
             } else {
-                raise ;
+                raise;
             }
         }
 
@@ -575,12 +545,7 @@ class MonitoringDeployer {
       - k8s-metrics.json: Kubernetes cluster metrics (nodes, pods, deployments)
     """
     def _deploy_grafana(
-        self: MonitoringDeployer,
-        app_name: str,
-        namespace: str,
-        apps_v1: Any,
-        core_v1: Any,
-        cluster_env: str
+        app_name: str, namespace: str, apps_v1: Any, core_v1: Any, cluster_env: str
     ) -> None {
         grafana_name = f"{app_name}-grafana";
         prometheus_name = f"{app_name}-prometheus";
@@ -611,7 +576,7 @@ class MonitoringDeployer {
                     namespace=namespace, body=grafana_secret
                 );
             } else {
-                raise ;
+                raise;
             }
         }
 
@@ -653,7 +618,7 @@ class MonitoringDeployer {
                     namespace=namespace, body=grafana_ds_configmap
                 );
             } else {
-                raise ;
+                raise;
             }
         }
 
@@ -695,7 +660,7 @@ class MonitoringDeployer {
                     namespace=namespace, body=grafana_provider_configmap
                 );
             } else {
-                raise ;
+                raise;
             }
         }
 
@@ -992,7 +957,7 @@ class MonitoringDeployer {
                     namespace=namespace, body=grafana_dashboard_configmap
                 );
             } else {
-                raise ;
+                raise;
             }
         }
 
@@ -1064,7 +1029,7 @@ class MonitoringDeployer {
                     namespace=namespace, body=grafana_deployment
                 );
             } else {
-                raise ;
+                raise;
             }
         }
 
@@ -1078,7 +1043,8 @@ class MonitoringDeployer {
                     'namespace': namespace,
                     'labels': {'app': grafana_name, 'managed': 'jac-scale'},
                     'annotations': {
-                        'service.beta.kubernetes.io/aws-load-balancer-type': 'nlb'
+                        'service.beta.kubernetes.io/aws-load-balancer-type': 'nlb',
+                        'service.beta.kubernetes.io/aws-load-balancer-scheme': 'internet-facing'
                     }
                 },
                 'spec': {
@@ -1121,7 +1087,7 @@ class MonitoringDeployer {
                     namespace=namespace, body=grafana_service
                 );
             } else {
-                raise ;
+                raise;
             }
         }
 
@@ -1138,12 +1104,7 @@ class MonitoringDeployer {
 
     """Deploy the full monitoring stack (Prometheus, kube-state-metrics, node-exporter, Grafana) for an app namespace."""
     def deploy(
-        self: MonitoringDeployer,
-        app_name: str,
-        namespace: str,
-        apps_v1: Any,
-        core_v1: Any,
-        cluster_env: str
+        app_name: str, namespace: str, apps_v1: Any, core_v1: Any, cluster_env: str
     ) -> None {
         if not self.k8s_config.monitoring_enabled {
             return;
@@ -1158,13 +1119,7 @@ class MonitoringDeployer {
     }
 
     """Destroy all monitoring resources: Prometheus, Grafana, kube-state-metrics, node-exporter."""
-    def destroy(
-        self: MonitoringDeployer,
-        app_name: str,
-        namespace: str,
-        apps_v1: Any,
-        core_v1: Any
-    ) -> None {
+    def destroy(app_name: str, namespace: str, apps_v1: Any, core_v1: Any) -> None {
         prometheus_name = f"{app_name}-prometheus";
         grafana_name = f"{app_name}-grafana";
         ksm_name = f"{app_name}-kube-state-metrics";
@@ -1191,7 +1146,7 @@ class MonitoringDeployer {
             );
         } except ApiException as e {
             if e.status != 404 {
-                raise ;
+                raise;
             }
         }
 
@@ -1211,7 +1166,7 @@ class MonitoringDeployer {
             );
         } except ApiException as e {
             if e.status != 404 {
-                raise ;
+                raise;
             }
         }
         # ClusterRole and ClusterRoleBinding are cluster-scoped (no namespace param)
@@ -1220,14 +1175,14 @@ class MonitoringDeployer {
             rbac_v1.delete_cluster_role(name=cluster_role_name);
         } except ApiException as e {
             if e.status != 404 {
-                raise ;
+                raise;
             }
         }
         try {
             rbac_v1.delete_cluster_role_binding(name=cluster_role_binding_name);
         } except ApiException as e {
             if e.status != 404 {
-                raise ;
+                raise;
             }
         }
         # node-exporter resources (DaemonSet)
@@ -1235,7 +1190,7 @@ class MonitoringDeployer {
             apps_v1.delete_namespaced_daemon_set(name=ne_name, namespace=namespace);
         } except ApiException as e {
             if e.status != 404 {
-                raise ;
+                raise;
             }
         }
         delete_if_exists(
@@ -1264,7 +1219,7 @@ class MonitoringDeployer {
                 core_v1.delete_namespaced_config_map(name=cm_name, namespace=namespace);
             } except ApiException as e {
                 if e.status != 404 {
-                    raise ;
+                    raise;
                 }
             }
         }
