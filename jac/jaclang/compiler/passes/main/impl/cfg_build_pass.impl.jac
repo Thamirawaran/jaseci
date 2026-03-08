@@ -163,11 +163,56 @@ impl CFGBuildPass.link_bbs(source: uni.UniCFGNode, target: uni.UniCFGNode) -> No
     }
 }
 
-"""Link sequential statements in a body, skipping after terminals."""
+"""Link sequential statements in a body, skipping after terminals.
+For compound statements (if/while/for/try/match/etc.), also connects
+their internal unconnected tails to the next sibling."""
 impl CFGBuildPass._link_sequential(body: Sequence[uni.CodeBlockStmt]) -> None {
     for i in range(1, len(body)) {
-        if not self._is_terminal(body[i - 1]) {
-            self.link_bbs(body[i - 1], body[i]);
+        prev = body[i - 1];
+        next = body[i];
+        if self._is_terminal(prev) {
+            continue;
+        }
+        if isinstance(prev, uni.IfStmt) and prev.else_body is not None {
+            # All branches covered by if/elif/else -- no direct prev→next edge.
+            # Only connect internal tails (body ends) to next.
+            self._connect_tails(prev, next);
+        } else {
+            # Direct prev→next edge (includes false-branch fallthrough for if-without-else).
+            self.link_bbs(prev, next);
+            # Also connect internal tails for compound stmts.
+            self._connect_tails(prev, next);
+        }
+    }
+}
+
+"""Find non-terminal CFG nodes with empty bb_out in parent's subtree and link to target.
+Skips expression subtrees and scope boundaries (Ability, Archetype, ImplDef).
+Recurses into compound stmts and non-CFG containers (ElseStmt, MatchCase, etc.)."""
+impl CFGBuildPass._connect_tails(parent: uni.UniNode, target: uni.UniCFGNode) -> None {
+    for k in parent.kid {
+        if not k or isinstance(k, uni.Expr) or isinstance(k, uni.Semi) {
+            continue;
+        }
+        if isinstance(k, (uni.Ability, uni.Archetype, uni.ImplDef)) {
+            # Scope boundary -- don't recurse into nested scopes
+            continue;
+        }
+        if isinstance(k, uni.UniCFGNode) {
+            if not k.bb_out and not self._is_terminal(k) {
+                # Unconnected tail -- link to target
+                self.link_bbs(k, target);
+            } elif isinstance(k, uni.IfStmt) and not k.else_body {
+                # If/elif without else: false branch falls through to target
+                self.link_bbs(k, target);
+                self._connect_tails(k, target);
+            } else {
+                # Has outgoing edges or is terminal -- check children
+                self._connect_tails(k, target);
+            }
+        } else {
+            # Non-CFG container (ElseStmt, MatchCase, etc.) -- check children
+            self._connect_tails(k, target);
         }
     }
 }
@@ -474,13 +519,13 @@ impl CFGBuildPass.exit_ability(nd: uni.Ability) -> None {
     }
 }
 
-"""Archetype: scope boundary, link to body."""
+"""Archetype: scope boundary, link to each child (declarations are independent)."""
 impl CFGBuildPass.exit_archetype(nd: uni.Archetype) -> None {
     if nd.body and isinstance(nd.body, Sequence) {
-        body = [s for s in nd.body if isinstance(s, uni.CodeBlockStmt)];
-        if body {
-            self.link_bbs(nd, body[0]);
-            self._link_sequential(body);
+        for s in nd.body {
+            if isinstance(s, uni.CodeBlockStmt) {
+                self.link_bbs(nd, s);
+            }
         }
     }
 }

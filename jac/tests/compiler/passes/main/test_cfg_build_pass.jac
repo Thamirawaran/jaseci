@@ -49,7 +49,7 @@ test "cfg if no else" {
 test "cfg return stmt" {
     dot = cfg_dot_from_file(file_name=os.path.join(FIXTURES, "cfg_return.jac"));
     expected_dot = (
-        "digraph G {\n" + '  0 [label="BB0\\ncan test_return_direct( )\\nprint ( \\"Before return\\" ) ;\\nreturn ;\\nprint ( \\"After return\\" ) ;", shape=box];\n' + '  1 [label="BB1\\ntest_return_direct ( ) ;", shape=box];\n' + "}\n"
+        "digraph G {\n" + '  0 [label="BB0\\ncan test_return_direct( )\\nprint ( \\"Before return\\" ) ;\\nreturn ;", shape=box];\n' + '  1 [label="BB1\\nprint ( \\"After return\\" ) ;", shape=box];\n' + '  2 [label="BB2\\ntest_return_direct ( ) ;", shape=box];\n' + "}\n"
     );
     assert dot == expected_dot;
 }

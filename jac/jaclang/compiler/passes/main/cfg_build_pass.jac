@@ -20,6 +20,7 @@ obj CFGBuildPass(UniPass) {
     # -- Utilities --
     def link_bbs(source: uni.UniCFGNode, target: uni.UniCFGNode) -> None;
     def _link_sequential(body: Sequence[uni.CodeBlockStmt]) -> None;
+    def _connect_tails(parent: uni.UniNode, target: uni.UniCFGNode) -> None;
     def _is_terminal(nd: uni.UniNode) -> bool;
     def _find_parent_of_types(nd: uni.UniNode, types: tuple) -> (uni.UniNode | None);
     def _find_next_cfg_stmt_after(
