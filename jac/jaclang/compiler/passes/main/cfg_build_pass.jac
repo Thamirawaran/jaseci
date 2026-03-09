@@ -73,5 +73,6 @@ obj CoalesceBBPass(UniPass) {
     def printgraph_cfg -> str;
 }
 
+def _is_structural_child(nd: uni.UniNode) -> bool;
 def cfg_dot_from_file(file_name: str) -> str;
 def cfg_raw_dot_from_file(file_name: str) -> str;

@@ -30,7 +30,7 @@ impl cfg_raw_dot_from_file(file_name: str) -> str {
     queue = [ir];
     while queue {
         nd = queue.pop(0);
-        if isinstance(nd, uni.UniCFGNode) and not isinstance(nd, uni.Semi) {
+        if isinstance(nd, uni.UniCFGNode) and not isinstance(nd, uni.Semi) and not _is_structural_child(nd) {
             nodes.append(nd);
         }
         for k in nd.kid {
@@ -161,7 +161,7 @@ impl CoalesceBBPass.printgraph_cfg -> str {
 
 """Enter BasicBlockStmt nodes."""
 impl CoalesceBBPass.enter_node(nd: uni.UniNode) -> None {
-    if (isinstance(nd, uni.UniCFGNode) and not isinstance(nd, uni.Semi)) {
+    if (isinstance(nd, uni.UniCFGNode) and not isinstance(nd, uni.Semi) and not _is_structural_child(nd)) {
         for bbs in self.basic_blocks.values() {
             if (nd in bbs['bb_stmts']) {
                 return;
@@ -240,8 +240,9 @@ impl CFGBuildPass._link_sequential(body: Sequence[uni.CodeBlockStmt]) -> None {
         if self._is_terminal(prev) {
             continue;
         }
-        if isinstance(prev, uni.IfStmt) and prev.else_body is not None {
-            # All branches covered by if/elif/else -- no direct prev→next edge.
+        has_else = hasattr(prev, 'else_body') and prev.else_body is not None;
+        if has_else and isinstance(prev, (uni.IfStmt, uni.WhileStmt, uni.InForStmt, uni.IterForStmt)) {
+            # All exit paths covered (if/elif/else or loop-else) -- no direct prev→next edge.
             # Only connect internal tails (body ends) to next.
             self._connect_tails(prev, next);
         } else {
@@ -259,6 +260,10 @@ Recurses into compound stmts and non-CFG containers (ElseStmt, MatchCase, etc.).
 impl CFGBuildPass._connect_tails(parent: uni.UniNode, target: uni.UniCFGNode) -> None {
     for k in parent.kid {
         if not k or isinstance(k, uni.Expr) or isinstance(k, uni.Semi) {
+            continue;
+        }
+        # Skip structural Assignment fields of IterForStmt (iter, count_by)
+        if isinstance(parent, uni.IterForStmt) and (k is parent.iter or k is parent.count_by) {
             continue;
         }
         if isinstance(k, (uni.Ability, uni.Archetype, uni.ImplDef)) {
@@ -325,10 +330,22 @@ impl CFGBuildPass._find_next_cfg_stmt_after(
 # Symbol collection (enter handlers)
 # ============================================================================
 
+"""Check if a node is a structural part of its parent (not a flow participant).
+E.g. IterForStmt.iter and IterForStmt.count_by are structural assignments."""
+impl _is_structural_child(nd: uni.UniNode) -> bool {
+    if isinstance(nd.parent, uni.IterForStmt) {
+        p: uni.IterForStmt = nd.parent;
+        if nd is p.iter or nd is p.count_by {
+            return True;
+        }
+    }
+    return False;
+}
+
 """Collect affected_symbols for all CFG nodes, then dispatch to type-specific enter."""
 impl CFGBuildPass.enter_node(nd: uni.UniNode) -> None {
     import from jaclang.compiler.symbol_utils { collect_assigned_symbols }
-    if isinstance(nd, uni.UniCFGNode) and not isinstance(nd, uni.Semi) {
+    if isinstance(nd, uni.UniCFGNode) and not isinstance(nd, uni.Semi) and not _is_structural_child(nd) {
         nd.affected_symbols.update(collect_assigned_symbols(nd));
     }
     # Dispatch to enter_if_stmt, enter_assert_stmt, etc.
