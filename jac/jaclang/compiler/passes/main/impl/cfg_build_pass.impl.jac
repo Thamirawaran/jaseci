@@ -79,7 +79,13 @@ impl CoalesceBBPass.printgraph_cfg -> str {
                         'for ' + bbs.iter.unparse() + bbs.condition.unparse() + bbs.count_by.unparse()
                     );
             } elif isinstance(bbs, uni.WhileStmt) {
-                cfg[key]['bb_stmts'][i] = 'while ' + bbs.condition.unparse();
+                has_sc = (isinstance(bbs.condition, uni.BoolExpr)
+                          and any(
+                              isinstance(v, uni.BoolExpr)
+                              or (isinstance(v, uni.AtomUnit) and isinstance(v.value, uni.BoolExpr))
+                              for v in bbs.condition.values
+                          ));
+                cfg[key]['bb_stmts'][i] = 'while' if has_sc else 'while ' + bbs.condition.unparse();
             } else {
                 cfg[key]['bb_stmts'][i] = bbs.unparse();
             }
@@ -199,8 +205,8 @@ impl CFGBuildPass._link_sequential(body: Sequence[uni.CodeBlockStmt]) -> None {
             continue;
         }
         has_else = hasattr(prev, 'else_body') and prev.else_body is not None;
-        # Check if prev has a short-circuit BoolExpr condition (already wired in exit_if_stmt)
-        has_bool_sc = (isinstance(prev, (uni.IfStmt, uni.ElseIf))
+        # Check if prev has a short-circuit BoolExpr condition (already wired in exit handler)
+        has_bool_sc = (isinstance(prev, (uni.IfStmt, uni.ElseIf, uni.WhileStmt))
                        and isinstance(prev.condition, uni.BoolExpr)
                        and any(self._unwrap_bool(v) for v in prev.condition.values));
         if has_else and isinstance(prev, (uni.IfStmt, uni.WhileStmt, uni.InForStmt, uni.IterForStmt)) {
@@ -512,19 +518,41 @@ impl CFGBuildPass.exit_else_stmt(nd: uni.ElseStmt) -> None {
 # Edge building (exit handlers) -- Loop
 # ============================================================================
 
-"""WhileStmt: body + back-edge + else_body."""
+"""WhileStmt: body + back-edge + else_body, with short-circuit wiring for BoolExpr conditions."""
 impl CFGBuildPass.exit_while_stmt(nd: uni.WhileStmt) -> None {
+    true_target: (uni.UniCFGNode | None) = nd.body[0] if nd.body else None;
+
+    # Determine false target: else_body or next sibling
+    false_target: (uni.UniCFGNode | None) = None;
+    if nd.else_body and isinstance(nd.else_body, uni.ElseStmt) and nd.else_body.body {
+        false_target = nd.else_body.body[0];
+    } elif nd.parent {
+        false_target = self._find_next_cfg_stmt_after(nd.parent, nd);
+    }
+
+    # Check for short-circuit boolean condition
+    has_bool_sc = (isinstance(nd.condition, uni.BoolExpr)
+                   and any(self._unwrap_bool(v) for v in nd.condition.values));
+
+    if has_bool_sc and true_target {
+        cond_bool: uni.BoolExpr = nd.condition;
+        entry = self._wire_bool_condition(cond_bool, true_target, false_target);
+        if entry { self.link_bbs(nd, entry); }
+    } else {
+        if true_target {
+            self.link_bbs(nd, true_target);
+        }
+        if false_target and not has_bool_sc {
+            self.link_bbs(nd, false_target);
+        }
+    }
+
     if nd.body {
-        self.link_bbs(nd, nd.body[0]);
         self._link_sequential(nd.body);
         # Back-edge: last body stmt -> loop header
         if not self._is_terminal(nd.body[-1]) {
             self.link_bbs(nd.body[-1], nd);
         }
-    }
-    # Loop-else: runs on normal exit (condition false), not on break
-    if nd.else_body and isinstance(nd.else_body, uni.ElseStmt) and nd.else_body.body {
-        self.link_bbs(nd, nd.else_body.body[0]);
     }
 }
 

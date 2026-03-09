@@ -2243,9 +2243,12 @@ impl TypeEvaluator._compute_narrowed_at(
             # Check if match target is the symbol we're narrowing
             if isinstance(pred.target, uni.Name) and pred.target.value == sym_name {
                 # Find which MatchCase contains the current stmt
-                match_case: uni.MatchCase | None = stmt.find_parent_of_type(
-                    uni.MatchCase
-                );
+                match_case: uni.MatchCase | None ;
+                if isinstance(stmt, uni.MatchCase) {
+                    match_case = stmt;
+                } else {
+                    match_case = stmt.find_parent_of_type(uni.MatchCase);
+                }
                 if match_case is not None and match_case.pattern {
                     pattern_type = self._get_type_from_match_pattern(match_case.pattern);
                     if pattern_type is not None {
