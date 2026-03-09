@@ -302,7 +302,7 @@ impl CFGBuildPass._wire_bool_condition(
 ) -> uni.UniCFGNode {
     import from jaclang.jac0core.constant { Tokens as Tok }
 
-    is_and = (expr.op.name == Tok.KW_AND.value);
+    is_and = (expr.op.name == Tok.KW_AND);
 
     # Resolve each value: BoolExpr (unwrap AtomUnit) or plain Expr
     # Each value becomes a branch point in the short-circuit chain
@@ -568,9 +568,10 @@ impl CFGBuildPass.exit_ctrl_stmt(nd: uni.CtrlStmt) -> None {
     if not loop {
         return;
     }
-    if nd.ctrl.value == "continue" {
+    import from jaclang.jac0core.constant { Tokens as Tok }
+    if nd.ctrl.name == Tok.KW_CONTINUE {
         self.link_bbs(nd, loop);
-    } elif nd.ctrl.value == "break" {
+    } elif nd.ctrl.name == Tok.KW_BREAK {
         if loop.parent {
             next_node = self._find_next_cfg_stmt_after(loop.parent, loop);
             if next_node {
