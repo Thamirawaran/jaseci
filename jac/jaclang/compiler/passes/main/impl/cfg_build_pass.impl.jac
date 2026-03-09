@@ -16,76 +16,6 @@ impl cfg_dot_from_file(file_name: str) -> str {
     return dot;
 }
 
-"""Print the raw (uncoalesced) control flow graph — one node per CFG statement."""
-impl cfg_raw_dot_from_file(file_name: str) -> str {
-    import from jaclang.jac0core.program { JacProgram }
-    with open(file_name) as f {
-        file_source = f.read();
-    }
-    ir = (prog := JacProgram()).compile(use_str=file_source, file_path=file_name);
-    CFGBuildPass(ir_in=ir, prog=prog);
-
-    # Collect all CFG nodes via BFS (preserves source order).
-    nodes: list[uni.UniCFGNode] = [];
-    queue = [ir];
-    while queue {
-        nd = queue.pop(0);
-        if isinstance(nd, (uni.CodeBlockStmt, uni.Archetype)) and not isinstance(nd, uni.Semi) and not _is_structural_child(nd) {
-            nodes.append(nd);
-        } elif hasattr(nd, 'bb_in') and hasattr(nd, 'bb_out') and (nd.bb_in or nd.bb_out) {
-            # Include any node with dynamic CFG attrs (BoolExpr, CompareExpr, etc.)
-            nodes.append(nd);
-        }
-        for k in nd.kid {
-            if k {
-                queue.append(k);
-            }
-        }
-    }
-
-    # Assign stable IDs.
-    node_id: dict = {};
-    for (i, nd) in enumerate(nodes) {
-        node_id[id(nd)] = i;
-    }
-
-    # Build dot.
-    dot = "digraph G {\n";
-    for nd in nodes {
-        nid = node_id[id(nd)];
-        if isinstance(nd, uni.ElseIf) {
-            label = "elif " + nd.condition.unparse();
-        } elif isinstance(nd, uni.IfStmt) {
-            label = "if " + nd.condition.unparse();
-        } elif isinstance(nd, uni.Archetype) {
-            label = "obj " + nd.name.unparse();
-        } elif isinstance(nd, uni.Ability) {
-            label = ("can " + nd.name_ref.unparse() + nd.signature.unparse())
-                if nd.signature else "";
-        } elif isinstance(nd, (uni.InForStmt, uni.IterForStmt)) {
-            label = ("for " + nd.target.unparse() + " in " + nd.collection.unparse())
-                if isinstance(nd, uni.InForStmt)
-                else ("for " + nd.iter.unparse() + nd.condition.unparse() + nd.count_by.unparse());
-        } elif isinstance(nd, uni.WhileStmt) {
-            label = "while " + nd.condition.unparse();
-        } else {
-            label = nd.unparse();
-        }
-        label = label.replace('"', '\\"');
-        dot += f'  {nid} [label="{label}", shape=box];\n';
-    }
-    for nd in nodes {
-        nid = node_id[id(nd)];
-        for out in nd.bb_out {
-            if id(out) in node_id {
-                dot += f"  {nid} -> {node_id[id(out)]};\n";
-            }
-        }
-    }
-    dot += "}\n";
-    return dot;
-}
-
 """Initialize CoalesceBBPass."""
 impl CoalesceBBPass.init(
     ir_in: uni.Module, prog: Any, cancel_token: Any = None
@@ -177,9 +107,15 @@ impl CoalesceBBPass.enter_node(nd: uni.UniNode) -> None {
                 return;
             }
         }
-        tail = nd.get_tail();
-        bb = self.get_bb(nd);
-        self.basic_blocks[self.bb_counter] = {'bb_stmts': bb, 'bb_out': tail.bb_out};
+        # Dynamically-annotated nodes (CompareExpr etc.) lack get_tail/get_head —
+        # treat them as single-node basic blocks.
+        if hasattr(nd, 'get_tail') {
+            tail = nd.get_tail();
+            bb = self.get_bb(nd);
+            self.basic_blocks[self.bb_counter] = {'bb_stmts': bb, 'bb_out': tail.bb_out};
+        } else {
+            self.basic_blocks[self.bb_counter] = {'bb_stmts': [nd], 'bb_out': nd.bb_out};
+        }
         self.bb_counter += 1;
     }
 }

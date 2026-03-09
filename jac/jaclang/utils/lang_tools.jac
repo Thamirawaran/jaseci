@@ -10,7 +10,7 @@ import from jaclang.compiler.passes.ecmascript { EsastGenPass, es_node_to_dict }
 import from jaclang.compiler.passes.ecmascript.es_unparse { es_to_js }
 import from jaclang.compiler.passes.ecmascript.estree { Node as EsNode }
 import from jaclang.compiler.passes.main.pyast_load_pass { PyastBuildPass }
-import from jaclang.compiler.passes.main.cfg_build_pass { cfg_raw_dot_from_file as cfg_dot_from_file }
+import from jaclang.compiler.passes.main.cfg_build_pass { cfg_dot_from_file }
 import from jaclang.compiler.passes.tool.doc_ir_gen_pass { DocIRGenPass }
 import from jaclang.jac0core.unitree { UniScopeNode }
 import from jaclang.jac0core.program { JacProgram }
