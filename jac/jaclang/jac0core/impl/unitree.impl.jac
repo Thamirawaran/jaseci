@@ -722,8 +722,12 @@ impl UniCFGNode.get_head -> UniCFGNode {
     while (
         nd.bb_in
         and (len(nd.bb_in) == 1)
-        and not isinstance(nd, (InForStmt, IterForStmt, WhileStmt))
-        and not isinstance(nd.bb_in[0], (InForStmt, IterForStmt, WhileStmt))
+        and not isinstance(
+            nd, (InForStmt, IterForStmt, WhileStmt, ConditionalNode)
+        )
+        and not isinstance(
+            nd.bb_in[0], (InForStmt, IterForStmt, WhileStmt, ConditionalNode)
+        )
         and nd.bb_in[0].bb_out
         and (len(nd.bb_in[0].bb_out) == 1)
     ) {
@@ -738,7 +742,9 @@ impl UniCFGNode.get_tail -> UniCFGNode {
     while (
         nd.bb_out
         and (len(nd.bb_out) == 1)
-        and not isinstance(nd, (InForStmt, IterForStmt, WhileStmt))
+        and not isinstance(
+            nd, (InForStmt, IterForStmt, WhileStmt, ConditionalNode)
+        )
         and not isinstance(nd.bb_out[0], (InForStmt, IterForStmt, WhileStmt))
         and nd.bb_out[0].bb_in
         and (len(nd.bb_out[0].bb_in) == 1)

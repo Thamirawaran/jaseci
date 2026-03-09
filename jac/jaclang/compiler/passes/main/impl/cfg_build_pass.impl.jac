@@ -309,20 +309,9 @@ impl CFGBuildPass._connect_tails(parent: uni.UniNode, target: uni.UniCFGNode) ->
     }
 }
 
-"""Unwrap AtomUnit parentheses to find inner BoolExpr, if any."""
-impl CFGBuildPass._unwrap_bool(expr: uni.Expr) -> (uni.BoolExpr | None) {
-    if isinstance(expr, uni.BoolExpr) {
-        return expr;
-    }
-    if isinstance(expr, uni.AtomUnit) and isinstance(expr.value, uni.BoolExpr) {
-        return expr.value;
-    }
-    return None;
-}
-
 """Wire short-circuit boolean flow for BoolExpr conditions.
 Sets sc_true_target/sc_false_target on the BoolExpr and links it to targets.
-Recursively wires nested BoolExprs. Returns the BoolExpr as the entry CFG node."""
+Returns the BoolExpr as the entry CFG node."""
 impl CFGBuildPass._wire_bool_condition(
     expr: uni.BoolExpr,
     true_target: (uni.UniCFGNode | None),
@@ -341,14 +330,6 @@ impl CFGBuildPass._wire_bool_condition(
     }
     if false_target {
         self.link_bbs(expr, false_target);
-    }
-
-    # Recursively wire nested BoolExprs (e.g. (a and b) or c)
-    for v in expr.values {
-        inner = self._unwrap_bool(v);
-        if inner {
-            self._wire_bool_condition(inner, true_target, false_target);
-        }
     }
 
     return expr;

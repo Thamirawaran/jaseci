@@ -26,7 +26,6 @@ obj CFGBuildPass(UniPass) {
         parent: uni.UniNode, child: uni.UniNode
     ) -> (uni.UniCFGNode | None);
 
-    def _unwrap_bool(expr: uni.Expr) -> (uni.BoolExpr | None);
     def _wire_bool_condition(
         expr: uni.BoolExpr,
         true_target: (uni.UniCFGNode | None),
