@@ -452,34 +452,32 @@ impl CFGBuildPass.exit_finally_stmt(nd: uni.FinallyStmt) -> None {
 # Edge building (exit handlers) -- Multi-branch
 # ============================================================================
 
-"""MatchStmt: link to each case body."""
+"""MatchStmt: link to each MatchCase node."""
 impl CFGBuildPass.exit_match_stmt(nd: uni.MatchStmt) -> None {
     for case in nd.cases {
-        if case.body {
-            self.link_bbs(nd, case.body[0]);
-        }
+        self.link_bbs(nd, case);
     }
 }
 
-"""MatchCase: sequential link within body (incoming set by MatchStmt)."""
+"""MatchCase: link to body (incoming set by MatchStmt)."""
 impl CFGBuildPass.exit_match_case(nd: uni.MatchCase) -> None {
     if nd.body {
+        self.link_bbs(nd, nd.body[0]);
         self._link_sequential(nd.body);
     }
 }
 
-"""SwitchStmt: link to each case body."""
+"""SwitchStmt: link to each SwitchCase node."""
 impl CFGBuildPass.exit_switch_stmt(nd: uni.SwitchStmt) -> None {
     for case in nd.cases {
-        if case.body {
-            self.link_bbs(nd, case.body[0]);
-        }
+        self.link_bbs(nd, case);
     }
 }
 
-"""SwitchCase: sequential link within body (incoming set by SwitchStmt)."""
+"""SwitchCase: link to body (incoming set by SwitchStmt)."""
 impl CFGBuildPass.exit_switch_case(nd: uni.SwitchCase) -> None {
     if nd.body {
+        self.link_bbs(nd, nd.body[0]);
         self._link_sequential(nd.body);
     }
 }

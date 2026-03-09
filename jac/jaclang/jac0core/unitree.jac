@@ -607,7 +607,7 @@ obj GlobalVars(ContextAwareNode, ElementStmt, AstAccessNode) {
 }
 
 """Test node type for Jac Ast."""
-obj Test(ContextAwareNode, AstSymbolNode, ElementStmt, UniScopeNode) {
+obj Test(ContextAwareNode, AstSymbolNode, ElementStmt, CodeBlockStmt, UniScopeNode) {
     with entry {
         TEST_COUNT = 0;
     }
@@ -1093,7 +1093,7 @@ obj CompareExpr(Expr) {
 }
 
 """BoolExpr node type for Jac Ast."""
-obj BoolExpr(Expr) {
+obj BoolExpr(Expr, UniCFGNode) {
     has op: Token,
         values: list[Expr];
 
@@ -1402,7 +1402,7 @@ obj MatchStmt(CodeBlockStmt) {
 }
 
 """MatchCase node type for Jac Ast."""
-obj MatchCase(UniScopeNode) {
+obj MatchCase(CodeBlockStmt, UniScopeNode) {
     has pattern: MatchPattern,
         guard: (Expr | None),
         body: list[CodeBlockStmt];
@@ -1419,7 +1419,7 @@ obj SwitchStmt(CodeBlockStmt) {
 }
 
 """SwitchCase node type for Jac Ast."""
-obj SwitchCase(UniScopeNode) {
+obj SwitchCase(CodeBlockStmt, UniScopeNode) {
     has pattern: (MatchPattern | None),
         body: list[CodeBlockStmt];
 

@@ -981,6 +981,7 @@ impl Test.postinit -> None {
         sym_category=SymbolType.TEST
     );
     UniScopeNode._init_scope(self, name=self.sym_name);
+    CodeBlockStmt.postinit(self);
     ContextAwareNode.postinit(self);
 }
 
@@ -1731,6 +1732,7 @@ impl CompareExpr.postinit -> None {
 impl BoolExpr.postinit -> None {
     UniNode.postinit(self);
     Expr.postinit(self);
+    UniCFGNode.postinit(self);
 }
 
 
@@ -2037,6 +2039,7 @@ impl MatchStmt.postinit -> None {
 
 impl MatchCase.postinit -> None {
     UniNode.postinit(self);
+    CodeBlockStmt.postinit(self);
     UniScopeNode._init_scope(self, name=f"{self.__class__.__name__}");
 }
 
@@ -2049,6 +2052,7 @@ impl SwitchStmt.postinit -> None {
 
 impl SwitchCase.postinit -> None {
     UniNode.postinit(self);
+    CodeBlockStmt.postinit(self);
     UniScopeNode._init_scope(self, name=f"{self.__class__.__name__}");
 }
 
