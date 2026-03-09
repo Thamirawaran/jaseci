@@ -30,7 +30,7 @@ impl cfg_raw_dot_from_file(file_name: str) -> str {
     queue = [ir];
     while queue {
         nd = queue.pop(0);
-        if isinstance(nd, uni.UniCFGNode) and not isinstance(nd, uni.Semi) and not _is_structural_child(nd) {
+        if isinstance(nd, (uni.CodeBlockStmt, uni.Archetype)) and not isinstance(nd, uni.Semi) and not _is_structural_child(nd) {
             nodes.append(nd);
         }
         for k in nd.kid {
@@ -161,7 +161,7 @@ impl CoalesceBBPass.printgraph_cfg -> str {
 
 """Enter BasicBlockStmt nodes."""
 impl CoalesceBBPass.enter_node(nd: uni.UniNode) -> None {
-    if (isinstance(nd, uni.UniCFGNode) and not isinstance(nd, uni.Semi) and not _is_structural_child(nd)) {
+    if (isinstance(nd, (uni.CodeBlockStmt, uni.Archetype)) and not isinstance(nd, uni.Semi) and not _is_structural_child(nd)) {
         for bbs in self.basic_blocks.values() {
             if (nd in bbs['bb_stmts']) {
                 return;
@@ -350,7 +350,7 @@ impl _is_structural_child(nd: uni.UniNode) -> bool {
 """Collect affected_symbols for all CFG nodes, then dispatch to type-specific enter."""
 impl CFGBuildPass.enter_node(nd: uni.UniNode) -> None {
     import from jaclang.compiler.symbol_utils { collect_assigned_symbols }
-    if isinstance(nd, uni.UniCFGNode) and not isinstance(nd, uni.Semi) and not _is_structural_child(nd) {
+    if isinstance(nd, (uni.CodeBlockStmt, uni.Archetype)) and not isinstance(nd, uni.Semi) and not _is_structural_child(nd) {
         nd.affected_symbols.update(collect_assigned_symbols(nd));
     }
     # Dispatch to enter_if_stmt, enter_assert_stmt, etc.
