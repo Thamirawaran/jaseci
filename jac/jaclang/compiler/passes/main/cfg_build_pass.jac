@@ -16,7 +16,6 @@ import from jaclang.jac0core.passes { UniPass }
 obj CFGBuildPass(UniPass) {
     def init(ir_in: uni.Module, prog: Any, cancel_token: Any = None) -> None;
     def before_pass -> None;
-
     # -- Utilities --
     def link_bbs(source: uni.UniCFGNode, target: uni.UniCFGNode) -> None;
     def _link_sequential(body: Sequence[uni.CodeBlockStmt]) -> None;
@@ -26,6 +25,7 @@ obj CFGBuildPass(UniPass) {
     def _find_next_cfg_stmt_after(
         parent: uni.UniNode, child: uni.UniNode
     ) -> (uni.UniCFGNode | None);
+
     def _unwrap_bool(expr: uni.Expr) -> (uni.BoolExpr | None);
     def _ensure_cfg_attrs(nd: Any) -> None;
     def _link_cfg(source: Any, target: Any) -> None;
@@ -41,7 +41,6 @@ obj CFGBuildPass(UniPass) {
     def enter_else_if(nd: uni.ElseIf) -> None;
     def enter_assert_stmt(nd: uni.AssertStmt) -> None;
     def enter_match_stmt(nd: uni.MatchStmt) -> None;
-
     # -- Edge building (exit) --
     # Branch
     def exit_if_stmt(nd: uni.IfStmt) -> None;

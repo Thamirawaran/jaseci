@@ -64,14 +64,9 @@ impl CoalesceBBPass.printgraph_cfg -> str {
     return dot;
 }
 
-"""Check if condition has nested BoolExpr (short-circuit wiring active)."""
+"""Check if condition is a BoolExpr (short-circuit wiring active)."""
 impl CoalesceBBPass._has_bool_sc(condition: uni.Expr) -> bool {
-    return (isinstance(condition, uni.BoolExpr)
-            and any(
-                isinstance(v, uni.BoolExpr)
-                or (isinstance(v, uni.AtomUnit) and isinstance(v.value, uni.BoolExpr))
-                for v in condition.values
-            ));
+    return isinstance(condition, uni.BoolExpr);
 }
 
 """Generate a compact label for a CFG node."""
@@ -79,17 +74,23 @@ impl CoalesceBBPass._node_label(nd: uni.UniNode) -> str {
     import from jaclang.jac0core.constant { Tokens as Tok }
     # -- Branch --
     if isinstance(nd, uni.ElseIf) {
-        return 'elif' if self._has_bool_sc(nd.condition) else 'elif ' + nd.condition.unparse();
+        return 'elif'
+            if self._has_bool_sc(nd.condition)
+            else 'elif ' + nd.condition.unparse();
     }
     if isinstance(nd, uni.IfStmt) {
-        return 'if' if self._has_bool_sc(nd.condition) else 'if ' + nd.condition.unparse();
+        return 'if'
+            if self._has_bool_sc(nd.condition)
+            else 'if ' + nd.condition.unparse();
     }
     if isinstance(nd, uni.ElseStmt) {
         return 'else';
     }
     # -- Loop --
     if isinstance(nd, uni.WhileStmt) {
-        return 'while' if self._has_bool_sc(nd.condition) else 'while ' + nd.condition.unparse();
+        return 'while'
+            if self._has_bool_sc(nd.condition)
+            else 'while ' + nd.condition.unparse();
     }
     if isinstance(nd, uni.InForStmt) {
         return 'for ' + nd.target.unparse() + ' in ' + nd.collection.unparse();
@@ -124,7 +125,9 @@ impl CoalesceBBPass._node_label(nd: uni.UniNode) -> str {
     if isinstance(nd, uni.WithStmt) {
         label = 'with ';
         for (idx, e) in enumerate(nd.exprs) {
-            if idx > 0 { label += ', '; }
+            if idx > 0 {
+                label += ', ';
+            }
             label += str(e.unparse());
         }
         return label;
@@ -159,9 +162,11 @@ impl CoalesceBBPass._node_label(nd: uni.UniNode) -> str {
 impl CoalesceBBPass.enter_node(nd: uni.UniNode) -> None {
     # Include nodes with dynamic CFG attrs (short-circuit chain participants)
     is_cfg_node = False;
-    if isinstance(nd, (uni.CodeBlockStmt, uni.Archetype)) and not isinstance(nd, uni.Semi) and not _is_structural_child(nd) {
+    if isinstance(nd, (uni.CodeBlockStmt, uni.Archetype))
+    and not isinstance(nd, uni.Semi)
+    and not _is_structural_child(nd) {
         is_cfg_node = True;
-    } elif hasattr(nd, 'bb_in') and hasattr(nd, 'bb_out') and (nd.bb_in or nd.bb_out) {
+    } elif nd?.bb_in and nd?.bb_out and (nd.bb_in or nd.bb_out) {
         is_cfg_node = True;
     }
     if (is_cfg_node) {
@@ -175,9 +180,15 @@ impl CoalesceBBPass.enter_node(nd: uni.UniNode) -> None {
         if hasattr(nd, 'get_tail') {
             tail = nd.get_tail();
             bb = self.get_bb(nd);
-            self.basic_blocks[self.bb_counter] = {'bb_stmts': bb, 'bb_out': tail.bb_out};
+            self.basic_blocks[self.bb_counter] = {
+                'bb_stmts': bb,
+                'bb_out': tail.bb_out
+            };
         } else {
-            self.basic_blocks[self.bb_counter] = {'bb_stmts': [nd], 'bb_out': nd.bb_out};
+            self.basic_blocks[self.bb_counter] = {
+                'bb_stmts': [nd],
+                'bb_out': nd.bb_out
+            };
         }
         self.bb_counter += 1;
     }
@@ -213,18 +224,16 @@ impl CoalesceBBPass.before_pass -> None {
 # ============================================================================
 # CFGBuildPass
 # ============================================================================
-
 impl CFGBuildPass.init(ir_in: uni.Module, prog: Any, cancel_token: Any = None) -> None {
     super.init(ir_in, prog, cancel_token);
 }
 
 """Before pass -- no state needed."""
-impl CFGBuildPass.before_pass -> None {}
+impl CFGBuildPass.before_pass -> None { }
 
 # ============================================================================
 # Utilities
 # ============================================================================
-
 """Link two CFG nodes: source.bb_out -> target, target.bb_in -> source.
 Also propagates affected_symbols for the Pyright-style branch-skipping optimization."""
 impl CFGBuildPass.link_bbs(source: uni.UniCFGNode, target: uni.UniCFGNode) -> None {
@@ -249,12 +258,16 @@ impl CFGBuildPass._link_sequential(body: Sequence[uni.CodeBlockStmt]) -> None {
         if self._is_terminal(prev) {
             continue;
         }
-        has_else = hasattr(prev, 'else_body') and prev.else_body is not None;
+        has_else = prev?.else_body and prev.else_body is not None;
         # Check if prev has a short-circuit BoolExpr condition (already wired in exit handler)
-        has_bool_sc = (isinstance(prev, (uni.IfStmt, uni.ElseIf, uni.WhileStmt))
-                       and isinstance(prev.condition, uni.BoolExpr)
-                       and any(self._unwrap_bool(v) for v in prev.condition.values));
-        if has_else and isinstance(prev, (uni.IfStmt, uni.WhileStmt, uni.InForStmt, uni.IterForStmt)) {
+        has_bool_sc = (
+            isinstance(prev, (uni.IfStmt, uni.ElseIf, uni.WhileStmt))
+            and isinstance(prev.condition, uni.BoolExpr)
+        );
+        if has_else
+        and isinstance(
+            prev, (uni.IfStmt, uni.WhileStmt, uni.InForStmt, uni.IterForStmt)
+        ) {
             # All exit paths covered (if/elif/else or loop-else) -- no direct prev→next edge.
             # Only connect internal tails (body ends) to next.
             self._connect_tails(prev, next);
@@ -279,7 +292,8 @@ impl CFGBuildPass._connect_tails(parent: uni.UniNode, target: uni.UniCFGNode) ->
             continue;
         }
         # Skip structural Assignment fields of IterForStmt (iter, count_by)
-        if isinstance(parent, uni.IterForStmt) and (k is parent.iter or k is parent.count_by) {
+        if isinstance(parent, uni.IterForStmt)
+        and (k is parent.iter or k is parent.count_by) {
             continue;
         }
         if isinstance(k, (uni.Ability, uni.Archetype, uni.ImplDef)) {
@@ -353,7 +367,7 @@ impl CFGBuildPass._wire_bool_condition(
 ) -> uni.UniCFGNode {
     import from jaclang.jac0core.constant { Tokens as Tok }
 
-    is_and = (expr.op.name == Tok.KW_AND);
+    is_and = expr.op.name == Tok.KW_AND;
 
     # Resolve each value: BoolExpr (unwrap AtomUnit) or plain Expr
     # Each value becomes a branch point in the short-circuit chain
@@ -415,7 +429,9 @@ impl CFGBuildPass._wire_bool_condition(
 
 """Check if a node is a terminal (no control flow continues past it)."""
 impl CFGBuildPass._is_terminal(nd: uni.UniNode) -> bool {
-    return isinstance(nd, (uni.ReturnStmt, uni.RaiseStmt, uni.CtrlStmt, uni.DisengageStmt));
+    return isinstance(
+        nd, (uni.ReturnStmt, uni.RaiseStmt, uni.CtrlStmt, uni.DisengageStmt)
+    );
 }
 
 """Find the nearest ancestor matching one of the given types."""
@@ -436,7 +452,7 @@ impl CFGBuildPass._find_parent_of_types(
 impl CFGBuildPass._find_next_cfg_stmt_after(
     parent: uni.UniNode, child: uni.UniNode
 ) -> (uni.UniCFGNode | None) {
-    if hasattr(parent, 'body') and isinstance(parent.body, Sequence) {
+    if parent?.body and isinstance(parent.body, Sequence) {
         found = False;
         for stmt in parent.body {
             if found and isinstance(stmt, uni.CodeBlockStmt) {
@@ -453,7 +469,6 @@ impl CFGBuildPass._find_next_cfg_stmt_after(
 # ============================================================================
 # Symbol collection (enter handlers)
 # ============================================================================
-
 """Check if a node is a structural part of its parent (not a flow participant).
 E.g. IterForStmt.iter and IterForStmt.count_by are structural assignments."""
 impl _is_structural_child(nd: uni.UniNode) -> bool {
@@ -469,7 +484,9 @@ impl _is_structural_child(nd: uni.UniNode) -> bool {
 """Collect affected_symbols for all CFG nodes, then dispatch to type-specific enter."""
 impl CFGBuildPass.enter_node(nd: uni.UniNode) -> None {
     import from jaclang.compiler.symbol_utils { collect_assigned_symbols }
-    if isinstance(nd, (uni.CodeBlockStmt, uni.Archetype)) and not isinstance(nd, uni.Semi) and not _is_structural_child(nd) {
+    if isinstance(nd, (uni.CodeBlockStmt, uni.Archetype))
+    and not isinstance(nd, uni.Semi)
+    and not _is_structural_child(nd) {
         nd.affected_symbols.update(collect_assigned_symbols(nd));
     }
     # Dispatch to enter_if_stmt, enter_assert_stmt, etc.
@@ -504,7 +521,6 @@ impl CFGBuildPass.enter_match_stmt(nd: uni.MatchStmt) -> None {
 # ============================================================================
 # Edge building (exit handlers) -- Branch
 # ============================================================================
-
 """IfStmt: link to body + else_body, with short-circuit wiring for BoolExpr conditions."""
 impl CFGBuildPass.exit_if_stmt(nd: uni.IfStmt) -> None {
     true_target: (uni.UniCFGNode | None) = nd.body[0] if nd.body else None;
@@ -519,9 +535,8 @@ impl CFGBuildPass.exit_if_stmt(nd: uni.IfStmt) -> None {
         }
     }
 
-    # Check for short-circuit boolean condition
-    has_bool_sc = (isinstance(nd.condition, uni.BoolExpr)
-                   and any(self._unwrap_bool(v) for v in nd.condition.values));
+    # Check for short-circuit boolean condition (any BoolExpr, not just nested ones)
+    has_bool_sc = isinstance(nd.condition, uni.BoolExpr);
 
     if has_bool_sc and true_target {
         # For if-without-else, find the next sibling as false fallthrough target
@@ -530,7 +545,9 @@ impl CFGBuildPass.exit_if_stmt(nd: uni.IfStmt) -> None {
         }
         cond_bool: uni.BoolExpr = nd.condition;
         entry = self._wire_bool_condition(cond_bool, true_target, false_target);
-        if entry { self.link_bbs(nd, entry); }
+        if entry {
+            self.link_bbs(nd, entry);
+        }
     } else {
         # Simple condition — direct edges
         if true_target {
@@ -562,7 +579,6 @@ impl CFGBuildPass.exit_else_stmt(nd: uni.ElseStmt) -> None {
 # ============================================================================
 # Edge building (exit handlers) -- Loop
 # ============================================================================
-
 """WhileStmt: body + back-edge + else_body, with short-circuit wiring for BoolExpr conditions."""
 impl CFGBuildPass.exit_while_stmt(nd: uni.WhileStmt) -> None {
     true_target: (uni.UniCFGNode | None) = nd.body[0] if nd.body else None;
@@ -575,14 +591,15 @@ impl CFGBuildPass.exit_while_stmt(nd: uni.WhileStmt) -> None {
         false_target = self._find_next_cfg_stmt_after(nd.parent, nd);
     }
 
-    # Check for short-circuit boolean condition
-    has_bool_sc = (isinstance(nd.condition, uni.BoolExpr)
-                   and any(self._unwrap_bool(v) for v in nd.condition.values));
+    # Check for short-circuit boolean condition (any BoolExpr, not just nested ones)
+    has_bool_sc = isinstance(nd.condition, uni.BoolExpr);
 
     if has_bool_sc and true_target {
         cond_bool: uni.BoolExpr = nd.condition;
         entry = self._wire_bool_condition(cond_bool, true_target, false_target);
-        if entry { self.link_bbs(nd, entry); }
+        if entry {
+            self.link_bbs(nd, entry);
+        }
     } else {
         if true_target {
             self.link_bbs(nd, true_target);
@@ -632,7 +649,6 @@ impl CFGBuildPass.exit_iter_for_stmt(nd: uni.IterForStmt) -> None {
 # ============================================================================
 # Edge building (exit handlers) -- Control flow
 # ============================================================================
-
 """CtrlStmt: break -> next after loop, continue -> loop header."""
 impl CFGBuildPass.exit_ctrl_stmt(nd: uni.CtrlStmt) -> None {
     loop = self._find_parent_of_types(
@@ -657,7 +673,6 @@ impl CFGBuildPass.exit_ctrl_stmt(nd: uni.CtrlStmt) -> None {
 # ============================================================================
 # Edge building (exit handlers) -- Exception
 # ============================================================================
-
 """TryStmt: body + except handlers + finally."""
 impl CFGBuildPass.exit_try_stmt(nd: uni.TryStmt) -> None {
     # Try body
@@ -707,7 +722,6 @@ impl CFGBuildPass.exit_finally_stmt(nd: uni.FinallyStmt) -> None {
 # ============================================================================
 # Edge building (exit handlers) -- Multi-branch
 # ============================================================================
-
 """MatchStmt: link to each MatchCase node."""
 impl CFGBuildPass.exit_match_stmt(nd: uni.MatchStmt) -> None {
     for case in nd.cases {
@@ -741,7 +755,6 @@ impl CFGBuildPass.exit_switch_case(nd: uni.SwitchCase) -> None {
 # ============================================================================
 # Edge building (exit handlers) -- Other
 # ============================================================================
-
 """WithStmt: link to body."""
 impl CFGBuildPass.exit_with_stmt(nd: uni.WithStmt) -> None {
     if nd.body {
@@ -761,11 +774,14 @@ impl CFGBuildPass.exit_typed_ctx_block(nd: uni.TypedCtxBlock) -> None {
 # ============================================================================
 # Edge building (exit handlers) -- Scope boundaries
 # ============================================================================
-
 """Ability: scope boundary, link to body."""
 impl CFGBuildPass.exit_ability(nd: uni.Ability) -> None {
     if nd.body and isinstance(nd.body, Sequence) {
-        body = [s for s in nd.body if isinstance(s, uni.CodeBlockStmt)];
+        body = [
+            s
+            for s in nd.body
+            if isinstance(s, uni.CodeBlockStmt)
+        ];
         if body {
             self.link_bbs(nd, body[0]);
             self._link_sequential(body);
@@ -787,7 +803,11 @@ impl CFGBuildPass.exit_archetype(nd: uni.Archetype) -> None {
 """ImplDef: scope boundary, link to body."""
 impl CFGBuildPass.exit_impl_def(nd: uni.ImplDef) -> None {
     if nd.body and isinstance(nd.body, Sequence) {
-        body = [s for s in nd.body if isinstance(s, uni.CodeBlockStmt)];
+        body = [
+            s
+            for s in nd.body
+            if isinstance(s, uni.CodeBlockStmt)
+        ];
         if body {
             self.link_bbs(nd, body[0]);
             self._link_sequential(body);
