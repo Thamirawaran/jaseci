@@ -74,3 +74,4 @@ obj CoalesceBBPass(UniPass) {
 }
 
 def cfg_dot_from_file(file_name: str) -> str;
+def cfg_raw_dot_from_file(file_name: str) -> str;
