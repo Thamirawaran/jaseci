@@ -46,49 +46,7 @@ impl CoalesceBBPass.printgraph_cfg -> str {
     }
     for (key, bb) in cfg.items() {
         for (i, bbs) in enumerate(bb['bb_stmts']) {
-            if isinstance(bbs, uni.ElseIf) {
-                has_sc = (isinstance(bbs.condition, uni.BoolExpr)
-                          and any(
-                              isinstance(v, uni.BoolExpr)
-                              or (isinstance(v, uni.AtomUnit) and isinstance(v.value, uni.BoolExpr))
-                              for v in bbs.condition.values
-                          ));
-                cfg[key]['bb_stmts'][i] = 'elif' if has_sc else 'elif ' + bbs.condition.unparse();
-            } elif isinstance(bbs, uni.IfStmt) {
-                has_sc = (isinstance(bbs.condition, uni.BoolExpr)
-                          and any(
-                              isinstance(v, uni.BoolExpr)
-                              or (isinstance(v, uni.AtomUnit) and isinstance(v.value, uni.BoolExpr))
-                              for v in bbs.condition.values
-                          ));
-                cfg[key]['bb_stmts'][i] = 'if' if has_sc else 'if ' + bbs.condition.unparse();
-            } elif isinstance(bbs, uni.ElseStmt) {
-                cfg[key]['bb_stmts'][i] = 'else';
-            } elif isinstance(bbs, uni.Archetype) {
-                cfg[key]['bb_stmts'][i] = 'obj ' + bbs.name.unparse();
-            } elif isinstance(bbs, uni.Ability) {
-                cfg[key]['bb_stmts'][i] = 'can ' + bbs.name_ref.unparse() + bbs.signature.unparse()
-                    if bbs.signature
-                    else '';
-            } elif isinstance(bbs, (uni.InForStmt, uni.IterForStmt)) {
-                cfg[key]['bb_stmts'][i] = (
-                    'for ' + bbs.target.unparse() + ' in ' + bbs.collection.unparse()
-                )
-                    if isinstance(bbs, uni.InForStmt)
-                    else (
-                        'for ' + bbs.iter.unparse() + bbs.condition.unparse() + bbs.count_by.unparse()
-                    );
-            } elif isinstance(bbs, uni.WhileStmt) {
-                has_sc = (isinstance(bbs.condition, uni.BoolExpr)
-                          and any(
-                              isinstance(v, uni.BoolExpr)
-                              or (isinstance(v, uni.AtomUnit) and isinstance(v.value, uni.BoolExpr))
-                              for v in bbs.condition.values
-                          ));
-                cfg[key]['bb_stmts'][i] = 'while' if has_sc else 'while ' + bbs.condition.unparse();
-            } else {
-                cfg[key]['bb_stmts'][i] = bbs.unparse();
-            }
+            cfg[key]['bb_stmts'][i] = self._node_label(bbs);
         }
     }
     for (key, value) in cfg.items() {
@@ -108,6 +66,97 @@ impl CoalesceBBPass.printgraph_cfg -> str {
     }
     dot += '}\n';
     return dot;
+}
+
+"""Check if condition has nested BoolExpr (short-circuit wiring active)."""
+impl CoalesceBBPass._has_bool_sc(condition: uni.Expr) -> bool {
+    return (isinstance(condition, uni.BoolExpr)
+            and any(
+                isinstance(v, uni.BoolExpr)
+                or (isinstance(v, uni.AtomUnit) and isinstance(v.value, uni.BoolExpr))
+                for v in condition.values
+            ));
+}
+
+"""Generate a compact label for a CFG node."""
+impl CoalesceBBPass._node_label(nd: uni.UniNode) -> str {
+    import from jaclang.jac0core.constant { Tokens as Tok }
+    # -- Branch --
+    if isinstance(nd, uni.ElseIf) {
+        return 'elif' if self._has_bool_sc(nd.condition) else 'elif ' + nd.condition.unparse();
+    }
+    if isinstance(nd, uni.IfStmt) {
+        return 'if' if self._has_bool_sc(nd.condition) else 'if ' + nd.condition.unparse();
+    }
+    if isinstance(nd, uni.ElseStmt) {
+        return 'else';
+    }
+    # -- Loop --
+    if isinstance(nd, uni.WhileStmt) {
+        return 'while' if self._has_bool_sc(nd.condition) else 'while ' + nd.condition.unparse();
+    }
+    if isinstance(nd, uni.InForStmt) {
+        return 'for ' + nd.target.unparse() + ' in ' + nd.collection.unparse();
+    }
+    if isinstance(nd, uni.IterForStmt) {
+        return 'for ' + nd.iter.unparse() + nd.condition.unparse() + nd.count_by.unparse();
+    }
+    # -- Match/Switch --
+    if isinstance(nd, uni.MatchStmt) {
+        return 'match ' + nd.target.unparse();
+    }
+    if isinstance(nd, uni.MatchCase) {
+        return 'case ' + nd.pattern.unparse() if nd.pattern else 'case';
+    }
+    if isinstance(nd, uni.SwitchStmt) {
+        return 'switch ' + nd.target.unparse();
+    }
+    if isinstance(nd, uni.SwitchCase) {
+        return 'case ' + nd.pattern.unparse() if nd.pattern else 'default';
+    }
+    # -- Exception --
+    if isinstance(nd, uni.TryStmt) {
+        return 'try';
+    }
+    if isinstance(nd, uni.Except) {
+        return 'except ' + nd.ex_type.unparse() if nd.ex_type else 'except';
+    }
+    if isinstance(nd, uni.FinallyStmt) {
+        return 'finally';
+    }
+    # -- With --
+    if isinstance(nd, uni.WithStmt) {
+        label = 'with ';
+        for (idx, e) in enumerate(nd.exprs) {
+            if idx > 0 { label += ', '; }
+            label += str(e.unparse());
+        }
+        return label;
+    }
+    # -- Scope boundaries --
+    if isinstance(nd, uni.Archetype) {
+        return 'obj ' + nd.name.unparse();
+    }
+    if isinstance(nd, uni.Ability) {
+        # Use actual keyword (def vs can)
+        kw: str = 'can';
+        for c in nd.kid {
+            if c and hasattr(c, 'name') and hasattr(c, 'value') {
+                if c.name == Tok.KW_DEF or c.name == Tok.KW_CAN {
+                    kw = str(c.value);
+                    break;
+                }
+            }
+        }
+        if nd.name_ref and nd.signature {
+            return kw + ' ' + nd.name_ref.unparse() + nd.signature.unparse();
+        } elif nd.name_ref {
+            return kw + ' ' + nd.name_ref.unparse();
+        }
+        return kw;
+    }
+    # -- Fallback: compact unparse --
+    return nd.unparse();
 }
 
 """Enter BasicBlockStmt nodes (and wired short-circuit nodes)."""

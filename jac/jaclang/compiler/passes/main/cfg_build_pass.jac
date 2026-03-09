@@ -79,6 +79,8 @@ obj CoalesceBBPass(UniPass) {
     def get_bb(nd: uni.UniCFGNode) -> list[uni.UniCFGNode];
     def enter_node(nd: uni.UniNode) -> None;
     def printgraph_cfg -> str;
+    def _node_label(nd: uni.UniNode) -> str;
+    def _has_bool_sc(condition: uni.Expr) -> bool;
 }
 
 def _is_structural_child(nd: uni.UniNode) -> bool;
