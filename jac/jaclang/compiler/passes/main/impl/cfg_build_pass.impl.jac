@@ -275,8 +275,13 @@ impl CFGBuildPass._connect_tails(parent: uni.UniNode, target: uni.UniCFGNode) ->
                 # Unconnected tail -- link to target
                 self.link_bbs(k, target);
             } elif isinstance(k, uni.IfStmt) and not k.else_body {
-                # If/elif without else: false branch falls through to target
-                self.link_bbs(k, target);
+                # If/elif without else: false branch falls through to target,
+                # but only if not already connected by _link_sequential in its own body context.
+                first_body = k.body[0] if k.body else None;
+                has_false_branch = any(o is not first_body for o in k.bb_out);
+                if not has_false_branch {
+                    self.link_bbs(k, target);
+                }
                 self._connect_tails(k, target);
             } else {
                 # Has outgoing edges or is terminal -- check children
