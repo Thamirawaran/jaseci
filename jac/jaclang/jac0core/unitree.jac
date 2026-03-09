@@ -369,6 +369,15 @@ obj UniCFGNode(UniNode) {
     def get_tail -> UniCFGNode;
 }
 
+"""A CFG node that branches on a condition with true/false targets.
+Used by BoolExpr (short-circuit) and IfElseExpr (ternary)."""
+obj ConditionalNode(UniCFGNode) {
+    has sc_true_target: (UniCFGNode | None) = None,
+        sc_false_target: (UniCFGNode | None) = None;
+
+    def postinit -> None;
+}
+
 """Expression is a combination of values, variables operators and fuctions that
 are evaluated to produce a value.
 
@@ -1093,7 +1102,7 @@ obj CompareExpr(Expr) {
 }
 
 """BoolExpr node type for Jac Ast."""
-obj BoolExpr(Expr, UniCFGNode) {
+obj BoolExpr(Expr, ConditionalNode) {
     has op: Token,
         values: list[Expr];
 

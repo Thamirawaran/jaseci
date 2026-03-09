@@ -158,15 +158,12 @@ impl CoalesceBBPass._node_label(nd: uni.UniNode) -> str {
     return nd.unparse();
 }
 
-"""Enter BasicBlockStmt nodes (and wired short-circuit nodes)."""
+"""Enter BasicBlockStmt nodes."""
 impl CoalesceBBPass.enter_node(nd: uni.UniNode) -> None {
-    # Include nodes with dynamic CFG attrs (short-circuit chain participants)
     is_cfg_node = False;
     if isinstance(nd, (uni.CodeBlockStmt, uni.Archetype))
     and not isinstance(nd, uni.Semi)
     and not _is_structural_child(nd) {
-        is_cfg_node = True;
-    } elif nd?.bb_in and nd?.bb_out and (nd.bb_in or nd.bb_out) {
         is_cfg_node = True;
     }
     if (is_cfg_node) {
@@ -175,21 +172,9 @@ impl CoalesceBBPass.enter_node(nd: uni.UniNode) -> None {
                 return;
             }
         }
-        # Dynamically-annotated nodes (CompareExpr etc.) lack get_tail/get_head —
-        # treat them as single-node basic blocks.
-        if hasattr(nd, 'get_tail') {
-            tail = nd.get_tail();
-            bb = self.get_bb(nd);
-            self.basic_blocks[self.bb_counter] = {
-                'bb_stmts': bb,
-                'bb_out': tail.bb_out
-            };
-        } else {
-            self.basic_blocks[self.bb_counter] = {
-                'bb_stmts': [nd],
-                'bb_out': nd.bb_out
-            };
-        }
+        tail = nd.get_tail();
+        bb = self.get_bb(nd);
+        self.basic_blocks[self.bb_counter] = {'bb_stmts': bb, 'bb_out': tail.bb_out};
         self.bb_counter += 1;
     }
 }
@@ -335,96 +320,38 @@ impl CFGBuildPass._unwrap_bool(expr: uni.Expr) -> (uni.BoolExpr | None) {
     return None;
 }
 
-"""Initialize CFG attributes on a plain Expr so it can participate in short-circuit flow."""
-impl CFGBuildPass._ensure_cfg_attrs(nd: Any) -> None {
-    if not hasattr(nd, 'bb_in') {
-        nd.bb_in = [];
-        nd.bb_out = [];
-        nd.affected_symbols = set();
-    }
-}
-
-"""Link two nodes in the CFG (duck-typed for Expr nodes with dynamic CFG attrs)."""
-impl CFGBuildPass._link_cfg(source: Any, target: Any) -> None {
-    if source and target {
-        if target not in source.bb_out {
-            source.bb_out.append(target);
-        }
-        if source not in target.bb_in {
-            target.bb_in.append(source);
-        }
-        target.affected_symbols.update(source.affected_symbols);
-    }
-}
-
 """Wire short-circuit boolean flow for BoolExpr conditions.
-Each value (including plain Expr) becomes a separate branch point.
-Returns the entry CFG node that the parent should link to."""
+Sets sc_true_target/sc_false_target on the BoolExpr and links it to targets.
+Recursively wires nested BoolExprs. Returns the BoolExpr as the entry CFG node."""
 impl CFGBuildPass._wire_bool_condition(
     expr: uni.BoolExpr,
     true_target: (uni.UniCFGNode | None),
     false_target: (uni.UniCFGNode | None)
 ) -> uni.UniCFGNode {
-    import from jaclang.jac0core.constant { Tokens as Tok }
+    import from jaclang.compiler.symbol_utils { collect_narrowing_symbols }
 
-    is_and = expr.op.name == Tok.KW_AND;
+    # Set branch targets on the BoolExpr itself
+    expr.sc_true_target = true_target;
+    expr.sc_false_target = false_target;
+    expr.affected_symbols.update(collect_narrowing_symbols(expr));
 
-    # Resolve each value: BoolExpr (unwrap AtomUnit) or plain Expr
-    # Each value becomes a branch point in the short-circuit chain
-    resolved: list = [];
+    # Link BoolExpr to its true/false targets
+    if true_target {
+        self.link_bbs(expr, true_target);
+    }
+    if false_target {
+        self.link_bbs(expr, false_target);
+    }
+
+    # Recursively wire nested BoolExprs (e.g. (a and b) or c)
     for v in expr.values {
         inner = self._unwrap_bool(v);
         if inner {
-            resolved.append(('bool', inner));
-        } else {
-            resolved.append(('expr', v));
+            self._wire_bool_condition(inner, true_target, false_target);
         }
     }
 
-    # Wire values right-to-left to resolve entry nodes
-    # For 'and': value true → next, value false → false_target (short-circuit)
-    # For 'or':  value true → true_target (short-circuit), value false → next
-    entries: list = [];  # parallel to resolved, stores entry CFG node for each value
-    for _r in resolved {
-        entries.append(None);
-    }
-
-    if is_and {
-        current_next = true_target;
-        for i in range(len(resolved) - 1, -1, -1) {
-            (kind, val) = resolved[i];
-            if kind == 'bool' {
-                entry = self._wire_bool_condition(val, current_next, false_target);
-                entries[i] = entry;
-            } else {
-                # Plain Expr — make it a CFG branch point
-                self._ensure_cfg_attrs(val);
-                self._link_cfg(val, current_next);
-                self._link_cfg(val, false_target);
-                entries[i] = val;
-            }
-            current_next = entries[i];
-        }
-    } else {
-        current_next = false_target;
-        for i in range(len(resolved) - 1, -1, -1) {
-            (kind, val) = resolved[i];
-            if kind == 'bool' {
-                entry = self._wire_bool_condition(val, true_target, current_next);
-                entries[i] = entry;
-            } else {
-                # Plain Expr — make it a CFG branch point
-                self._ensure_cfg_attrs(val);
-                self._link_cfg(val, true_target);
-                self._link_cfg(val, current_next);
-                entries[i] = val;
-            }
-            current_next = entries[i];
-        }
-    }
-
-    # Return the entry node (first value's entry)
-    return entries[0] if entries[0] else (expr :> uni.UniCFGNode);
+    return expr;
 }
 
 """Check if a node is a terminal (no control flow continues past it)."""

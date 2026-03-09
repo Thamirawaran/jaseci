@@ -27,8 +27,6 @@ obj CFGBuildPass(UniPass) {
     ) -> (uni.UniCFGNode | None);
 
     def _unwrap_bool(expr: uni.Expr) -> (uni.BoolExpr | None);
-    def _ensure_cfg_attrs(nd: Any) -> None;
-    def _link_cfg(source: Any, target: Any) -> None;
     def _wire_bool_condition(
         expr: uni.BoolExpr,
         true_target: (uni.UniCFGNode | None),

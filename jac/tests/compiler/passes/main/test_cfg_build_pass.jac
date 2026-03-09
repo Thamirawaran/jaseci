@@ -121,7 +121,7 @@ test "cfg raise terminal" {
 test "cfg boolean short circuit" {
     dot = cfg_dot_from_file(file_name=os.path.join(FIXTURES, "cfg_bool_expr.jac"));
     expected_dot = (
-        "digraph G {\n" + '  0 [label="BB0\\nx = 5 ;\\nif\\nx < 3", shape=box];\n' + '  1 [label="BB1\\nx < 10", shape=box];\n' + '  2 [label="BB2\\nx > 20", shape=box];\n' + '  3 [label="BB3\\nx < 30", shape=box];\n' + '  4 [label="BB4\\nprint ( x ) ;\\nx = x + 1 ;", shape=box];\n' + "  0 -> 1;\n" + "  0 -> 2;\n" + "  1 -> 4;\n" + "  1 -> 2;\n" + "  2 -> 3;\n" + "  3 -> 4;\n" + "}\n"
+        "digraph G {\n" + '  0 [label="BB0\\nx = 5 ;\\nif\\n( x < 3 and x < 10 ) or ( x > 20 and x < 30 )", shape=box];\n' + '  1 [label="BB1\\nprint ( x ) ;\\nx = x + 1 ;", shape=box];\n' + "  0 -> 1;\n" + "}\n"
     );
     assert dot == expected_dot;
 }

@@ -710,6 +710,11 @@ impl UniCFGNode.postinit -> None {
     self.affected_symbols = set();
 }
 
+"""Initialize ConditionalNode (CFG branch point with true/false targets)."""
+impl ConditionalNode.postinit -> None {
+    UniCFGNode.postinit(self);
+}
+
 
 """Get head by walking up the CFG iteratively."""
 impl UniCFGNode.get_head -> UniCFGNode {
@@ -1732,7 +1737,7 @@ impl CompareExpr.postinit -> None {
 impl BoolExpr.postinit -> None {
     UniNode.postinit(self);
     Expr.postinit(self);
-    UniCFGNode.postinit(self);
+    ConditionalNode.postinit(self);
 }
 
 
