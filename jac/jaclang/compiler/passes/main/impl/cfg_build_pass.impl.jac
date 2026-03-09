@@ -1,9 +1,5 @@
 """Control flow graph build pass implementation."""
 
-# ============================================================================
-# cfg_dot_from_file + CoalesceBBPass (unchanged)
-# ============================================================================
-
 """Print the control flow graph."""
 impl cfg_dot_from_file(file_name: str) -> str {
     import from jaclang.jac0core.program { JacProgram }
