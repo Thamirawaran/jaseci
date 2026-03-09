@@ -288,7 +288,7 @@ glob NODE_SPECS: tuple = (
              type_idx=22,
              class_name="BoolExpr",
              is_scope=False,
-             is_cfg=False,
+             is_cfg=True,
              is_name_atom=False,
              fields=(FieldDesc(name="op", kind=4), FieldDesc(name="values", kind=5))
          ),
@@ -1008,7 +1008,7 @@ glob NODE_SPECS: tuple = (
              type_idx=87,
              class_name="MatchCase",
              is_scope=True,
-             is_cfg=False,
+             is_cfg=True,
              is_name_atom=False,
              fields=(
                  FieldDesc(name="pattern", kind=4),
@@ -1412,7 +1412,7 @@ glob NODE_SPECS: tuple = (
              type_idx=124,
              class_name="SwitchCase",
              is_scope=True,
-             is_cfg=False,
+             is_cfg=True,
              is_name_atom=False,
              fields=(FieldDesc(name="pattern", kind=6), FieldDesc(name="body", kind=5))
          ),
@@ -1428,7 +1428,7 @@ glob NODE_SPECS: tuple = (
              type_idx=126,
              class_name="Test",
              is_scope=True,
-             is_cfg=False,
+             is_cfg=True,
              is_name_atom=False,
              fields=(
                  FieldDesc(name="doc", kind=6),
