@@ -47,9 +47,21 @@ impl CoalesceBBPass.printgraph_cfg -> str {
     for (key, bb) in cfg.items() {
         for (i, bbs) in enumerate(bb['bb_stmts']) {
             if isinstance(bbs, uni.ElseIf) {
-                cfg[key]['bb_stmts'][i] = 'elif ' + bbs.condition.unparse();
+                has_sc = (isinstance(bbs.condition, uni.BoolExpr)
+                          and any(
+                              isinstance(v, uni.BoolExpr)
+                              or (isinstance(v, uni.AtomUnit) and isinstance(v.value, uni.BoolExpr))
+                              for v in bbs.condition.values
+                          ));
+                cfg[key]['bb_stmts'][i] = 'elif' if has_sc else 'elif ' + bbs.condition.unparse();
             } elif isinstance(bbs, uni.IfStmt) {
-                cfg[key]['bb_stmts'][i] = 'if ' + bbs.condition.unparse();
+                has_sc = (isinstance(bbs.condition, uni.BoolExpr)
+                          and any(
+                              isinstance(v, uni.BoolExpr)
+                              or (isinstance(v, uni.AtomUnit) and isinstance(v.value, uni.BoolExpr))
+                              for v in bbs.condition.values
+                          ));
+                cfg[key]['bb_stmts'][i] = 'if' if has_sc else 'if ' + bbs.condition.unparse();
             } elif isinstance(bbs, uni.ElseStmt) {
                 cfg[key]['bb_stmts'][i] = 'else';
             } elif isinstance(bbs, uni.Archetype) {
