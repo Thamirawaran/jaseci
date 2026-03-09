@@ -32,6 +32,9 @@ impl cfg_raw_dot_from_file(file_name: str) -> str {
         nd = queue.pop(0);
         if isinstance(nd, (uni.CodeBlockStmt, uni.Archetype)) and not isinstance(nd, uni.Semi) and not _is_structural_child(nd) {
             nodes.append(nd);
+        } elif hasattr(nd, 'bb_in') and hasattr(nd, 'bb_out') and (nd.bb_in or nd.bb_out) {
+            # Include any node with dynamic CFG attrs (BoolExpr, CompareExpr, etc.)
+            nodes.append(nd);
         }
         for k in nd.kid {
             if k {
@@ -159,9 +162,16 @@ impl CoalesceBBPass.printgraph_cfg -> str {
     return dot;
 }
 
-"""Enter BasicBlockStmt nodes."""
+"""Enter BasicBlockStmt nodes (and wired short-circuit nodes)."""
 impl CoalesceBBPass.enter_node(nd: uni.UniNode) -> None {
-    if (isinstance(nd, (uni.CodeBlockStmt, uni.Archetype)) and not isinstance(nd, uni.Semi) and not _is_structural_child(nd)) {
+    # Include nodes with dynamic CFG attrs (short-circuit chain participants)
+    is_cfg_node = False;
+    if isinstance(nd, (uni.CodeBlockStmt, uni.Archetype)) and not isinstance(nd, uni.Semi) and not _is_structural_child(nd) {
+        is_cfg_node = True;
+    } elif hasattr(nd, 'bb_in') and hasattr(nd, 'bb_out') and (nd.bb_in or nd.bb_out) {
+        is_cfg_node = True;
+    }
+    if (is_cfg_node) {
         for bbs in self.basic_blocks.values() {
             if (nd in bbs['bb_stmts']) {
                 return;
@@ -241,9 +251,16 @@ impl CFGBuildPass._link_sequential(body: Sequence[uni.CodeBlockStmt]) -> None {
             continue;
         }
         has_else = hasattr(prev, 'else_body') and prev.else_body is not None;
+        # Check if prev has a short-circuit BoolExpr condition (already wired in exit_if_stmt)
+        has_bool_sc = (isinstance(prev, (uni.IfStmt, uni.ElseIf))
+                       and isinstance(prev.condition, uni.BoolExpr)
+                       and any(self._unwrap_bool(v) for v in prev.condition.values));
         if has_else and isinstance(prev, (uni.IfStmt, uni.WhileStmt, uni.InForStmt, uni.IterForStmt)) {
             # All exit paths covered (if/elif/else or loop-else) -- no direct prev→next edge.
             # Only connect internal tails (body ends) to next.
+            self._connect_tails(prev, next);
+        } elif has_bool_sc {
+            # Short-circuit wiring handled false path via BoolExpr chain -- no direct prev→next.
             self._connect_tails(prev, next);
         } else {
             # Direct prev→next edge (includes false-branch fallthrough for if-without-else).
@@ -292,6 +309,109 @@ impl CFGBuildPass._connect_tails(parent: uni.UniNode, target: uni.UniCFGNode) ->
             self._connect_tails(k, target);
         }
     }
+}
+
+"""Unwrap AtomUnit parentheses to find inner BoolExpr, if any."""
+impl CFGBuildPass._unwrap_bool(expr: uni.Expr) -> (uni.BoolExpr | None) {
+    if isinstance(expr, uni.BoolExpr) {
+        return expr;
+    }
+    if isinstance(expr, uni.AtomUnit) and isinstance(expr.value, uni.BoolExpr) {
+        return expr.value;
+    }
+    return None;
+}
+
+"""Initialize CFG attributes on a plain Expr so it can participate in short-circuit flow."""
+impl CFGBuildPass._ensure_cfg_attrs(nd: Any) -> None {
+    if not hasattr(nd, 'bb_in') {
+        nd.bb_in = [];
+        nd.bb_out = [];
+        nd.affected_symbols = set();
+    }
+}
+
+"""Link two nodes in the CFG (duck-typed for Expr nodes with dynamic CFG attrs)."""
+impl CFGBuildPass._link_cfg(source: Any, target: Any) -> None {
+    if source and target {
+        if target not in source.bb_out {
+            source.bb_out.append(target);
+        }
+        if source not in target.bb_in {
+            target.bb_in.append(source);
+        }
+        target.affected_symbols.update(source.affected_symbols);
+    }
+}
+
+"""Wire short-circuit boolean flow for BoolExpr conditions.
+Each value (including plain Expr) becomes a separate branch point.
+Returns the entry CFG node that the parent should link to."""
+impl CFGBuildPass._wire_bool_condition(
+    expr: uni.BoolExpr,
+    true_target: (uni.UniCFGNode | None),
+    false_target: (uni.UniCFGNode | None)
+) -> uni.UniCFGNode {
+    import from jaclang.jac0core.constant { Tokens as Tok }
+
+    is_and = (expr.op.name == Tok.KW_AND.value);
+
+    # Resolve each value: BoolExpr (unwrap AtomUnit) or plain Expr
+    # Each value becomes a branch point in the short-circuit chain
+    resolved: list = [];
+    for v in expr.values {
+        inner = self._unwrap_bool(v);
+        if inner {
+            resolved.append(('bool', inner));
+        } else {
+            resolved.append(('expr', v));
+        }
+    }
+
+    # Wire values right-to-left to resolve entry nodes
+    # For 'and': value true → next, value false → false_target (short-circuit)
+    # For 'or':  value true → true_target (short-circuit), value false → next
+    entries: list = [];  # parallel to resolved, stores entry CFG node for each value
+    for _r in resolved {
+        entries.append(None);
+    }
+
+    if is_and {
+        current_next = true_target;
+        for i in range(len(resolved) - 1, -1, -1) {
+            (kind, val) = resolved[i];
+            if kind == 'bool' {
+                entry = self._wire_bool_condition(val, current_next, false_target);
+                entries[i] = entry;
+            } else {
+                # Plain Expr — make it a CFG branch point
+                self._ensure_cfg_attrs(val);
+                self._link_cfg(val, current_next);
+                self._link_cfg(val, false_target);
+                entries[i] = val;
+            }
+            current_next = entries[i];
+        }
+    } else {
+        current_next = false_target;
+        for i in range(len(resolved) - 1, -1, -1) {
+            (kind, val) = resolved[i];
+            if kind == 'bool' {
+                entry = self._wire_bool_condition(val, true_target, current_next);
+                entries[i] = entry;
+            } else {
+                # Plain Expr — make it a CFG branch point
+                self._ensure_cfg_attrs(val);
+                self._link_cfg(val, true_target);
+                self._link_cfg(val, current_next);
+                entries[i] = val;
+            }
+            current_next = entries[i];
+        }
+    }
+
+    # Return the entry node (first value's entry)
+    return entries[0] if entries[0] else (expr :> uni.UniCFGNode);
 }
 
 """Check if a node is a terminal (no control flow continues past it)."""
@@ -386,20 +506,45 @@ impl CFGBuildPass.enter_match_stmt(nd: uni.MatchStmt) -> None {
 # Edge building (exit handlers) -- Branch
 # ============================================================================
 
-"""IfStmt: link to body + else_body."""
+"""IfStmt: link to body + else_body, with short-circuit wiring for BoolExpr conditions."""
 impl CFGBuildPass.exit_if_stmt(nd: uni.IfStmt) -> None {
-    # Sequential link within body (first stmt gets if as predecessor)
-    if nd.body {
-        self.link_bbs(nd, nd.body[0]);
-        self._link_sequential(nd.body);
-    }
-    # Else branch
+    true_target: (uni.UniCFGNode | None) = nd.body[0] if nd.body else None;
+
+    # Determine false target
+    false_target: (uni.UniCFGNode | None) = None;
     if nd.else_body {
         if isinstance(nd.else_body, uni.ElseIf) {
-            self.link_bbs(nd, nd.else_body);
+            false_target = nd.else_body;
         } elif isinstance(nd.else_body, uni.ElseStmt) and nd.else_body.body {
-            self.link_bbs(nd, nd.else_body.body[0]);
+            false_target = nd.else_body.body[0];
         }
+    }
+
+    # Check for short-circuit boolean condition
+    has_bool_sc = (isinstance(nd.condition, uni.BoolExpr)
+                   and any(self._unwrap_bool(v) for v in nd.condition.values));
+
+    if has_bool_sc and true_target {
+        # For if-without-else, find the next sibling as false fallthrough target
+        if not false_target and not nd.else_body and nd.parent {
+            false_target = self._find_next_cfg_stmt_after(nd.parent, nd);
+        }
+        cond_bool: uni.BoolExpr = nd.condition;
+        entry = self._wire_bool_condition(cond_bool, true_target, false_target);
+        if entry { self.link_bbs(nd, entry); }
+    } else {
+        # Simple condition — direct edges
+        if true_target {
+            self.link_bbs(nd, true_target);
+        }
+        if false_target {
+            self.link_bbs(nd, false_target);
+        }
+    }
+
+    # Sequential linking within body
+    if nd.body {
+        self._link_sequential(nd.body);
     }
 }
 
