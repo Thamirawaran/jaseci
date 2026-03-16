@@ -1216,22 +1216,70 @@ impl JacBasics.run_test(
     verbose: bool = False
 ) -> int {
     import from jaclang.runtimelib.test { JacTestCheck }
+
+    """Delegate client test compilation and execution to jac-client plugin.""";
+    def _run_cl_tests(cl_files: list[str], base: str) -> int {
+        try {
+            import from jac_client.plugin.utils { run_client_tests }
+        } except ImportError {
+            JacConsole.get_console().warning(
+                'jac-client package not installed. Skipping client tests.\n'
+                'Install with: pip install jac-client'
+            );
+            return 0;
+        }
+        return run_client_tests(cl_files, base, entry_point=filepath or '');
+    }
+
     test_file = False;
     ret_count = 0;
     if filepath {
         if filepath.endswith('.jac') {
-            (base, mod_name) = os.path.split(filepath);
-            base = base or './';
-            mod_name = mod_name[:-4];
-            if mod_name.endswith('.test') {
-                mod_name = mod_name[:-5];
+            _fname = os.path.basename(filepath);
+            # Route client test files to bun test runner
+            if _fname.endswith('.cl.test.jac') {
+                test_file = True;
+                ret_count = _run_cl_tests(
+                    [os.path.abspath(filepath)],
+                    os.path.dirname(os.path.abspath(filepath)) or os.getcwd()
+                );
+            } elif _fname.endswith('.cl.jac') {
+                # Base client module — discover its .cl.test.jac annex
+                import from jaclang.jac0core.bccache { discover_annex_files }
+                _cl_test_files = discover_annex_files(
+                    os.path.abspath(filepath), '.test.jac'
+                );
+                _cl_test_files = [
+                    f
+                    for f in _cl_test_files
+                    if f.endswith('.cl.test.jac')
+                ];
+                if _cl_test_files {
+                    test_file = True;
+                    ret_count = _run_cl_tests(
+                        _cl_test_files,
+                        os.path.dirname(os.path.abspath(filepath)) or os.getcwd()
+                    );
+                } else {
+                    JacConsole.get_console().warning(
+                        f'No client test file found for {filepath}. '
+                        f'Expected: {_fname.replace(".cl.jac", ".cl.test.jac")}'
+                    );
+                }
+            } else {
+                (base, mod_name) = os.path.split(filepath);
+                base = base or './';
+                mod_name = mod_name[:-4];
+                if mod_name.endswith('.test') {
+                    mod_name = mod_name[:-5];
+                }
+                JacTestCheck.reset();
+                JacRuntimeInterface.jac_import(target=mod_name, base_path=base);
+                JacTestCheck.run_test(
+                    xit, maxfail, verbose, os.path.abspath(filepath), func_name
+                );
+                ret_count = JacTestCheck.failcount;
             }
-            JacTestCheck.reset();
-            JacRuntimeInterface.jac_import(target=mod_name, base_path=base);
-            JacTestCheck.run_test(
-                xit, maxfail, verbose, os.path.abspath(filepath), func_name
-            );
-            ret_count = JacTestCheck.failcount;
         } else {
             JacConsole.get_console().error('Not a .jac file.');
         }
@@ -1240,6 +1288,7 @@ impl JacBasics.run_test(
     }
     if (filter or directory) {
         current_dir = directory or os.getcwd();
+        cl_test_files: list[str] = [];
         for (root_dir, _, files) in os.walk(current_dir, topdown=True) {
             files = [
                 file
@@ -1248,10 +1297,16 @@ impl JacBasics.run_test(
             ]
                 if filter
                 else files;
+            # Separate client test files from server test files
+            for file in files {
+                if file.endswith('.cl.test.jac') {
+                    cl_test_files.append(os.path.join(root_dir, file));
+                }
+            }
             files = [
                 file
                 for file in files
-                if not file.endswith(('.test.jac', '.impl.jac'))
+                if not file.endswith(('.test.jac', '.impl.jac')) and '.cl.' not in file
             ];
             for file in files {
                 if file.endswith('.jac') {
@@ -1276,6 +1331,11 @@ impl JacBasics.run_test(
         JacTestCheck.breaker = False;
         ret_count += JacTestCheck.failcount;
         JacTestCheck.failcount = 0;
+        # Run collected client tests via bun
+        if cl_test_files {
+            test_file = True;
+            ret_count += _run_cl_tests(cl_test_files, current_dir);
+        }
         if not test_file {
             JacConsole.get_console().warning('No test files found.');
         }
