@@ -16,6 +16,11 @@ impl ViteCompiler._get_client_dir(self: ViteCompiler) -> Path {
 impl ViteCompiler.compile(
     self: ViteCompiler, module: ModuleType, module_path: Path
 ) -> tuple[list[str], list[str]] {
+    # Compile runtime first to discover its exports, so add_runtime_imports
+    # can generate precise import statements for each module.
+    (_, runtime_exports) = self.compile_runtime_utils();
+    self.jac_compiler.runtime_exports = runtime_exports;
+
     (module_js, mod, module_manifest) = self.jac_compiler.compile_module(module_path);
     collected_exports: set[str] = set(
         self.jac_compiler.extract_exports(module_manifest)
@@ -35,7 +40,7 @@ impl ViteCompiler.compile(
         collected_exports=collected_exports,
         collected_globals=collected_globals
     );
-    # Compile runtime AFTER dependencies so it overwrites any dependency-compiled
+    # Compile runtime again at the end so it overwrites any dependency-compiled
     # version of client_runtime.js with the proper ES module exports
     self.compile_runtime_utils();
     self.copy_root_assets();

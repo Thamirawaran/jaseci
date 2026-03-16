@@ -14,7 +14,8 @@ with entry {
 obj JacToJSCompiler {
     has _compile_to_js: Callable[([Path], tuple[(str, (ModuleType | None))])],
         _extract_client_exports: Callable[([Any], list[str])],
-        _extract_client_globals: Callable[([Any, ModuleType], dict[(str, Any)])];
+        _extract_client_globals: Callable[([Any, ModuleType], dict[(str, Any)])],
+        runtime_exports: list[str] = [];
 
     def compile_module(
         module_path: Path
