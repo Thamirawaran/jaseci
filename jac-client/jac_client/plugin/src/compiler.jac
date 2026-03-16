@@ -65,7 +65,8 @@ class ViteCompiler {
     ) -> None;
 
     def copy_root_assets(self: ViteCompiler) -> None;
-    def create_entry_file(self: ViteCompiler, module_path: Path) -> None;
+    def create_entry_file(self: ViteCompiler, module_path: Path, client_exports: (set[str] | None) = None) -> None;
+    def _resolve_app_export(self: ViteCompiler, client_exports: (set[str] | None) = None) -> str;
     def _create_pages_entry_content(self: ViteCompiler, module_path: Path) -> str;
     def _scan_and_compile_pages(
         self: ViteCompiler,

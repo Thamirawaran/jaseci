@@ -39,7 +39,7 @@ impl ViteCompiler.compile(
     # version of client_runtime.js with the proper ES module exports
     self.compile_runtime_utils();
     self.copy_root_assets();
-    self.create_entry_file(module_path);
+    self.create_entry_file(module_path, client_exports=collected_exports);
     # Return exports and globals without bundling
     client_exports = sorted(collected_exports);
     client_globals = list(collected_globals.keys());
@@ -60,18 +60,47 @@ impl ViteCompiler.compile_and_bundle(
 }
 
 """Create the main entry file for Vite bundling."""
-impl ViteCompiler.create_entry_file(self: ViteCompiler, module_path: Path) -> None {
+impl ViteCompiler.create_entry_file(self: ViteCompiler, module_path: Path, client_exports: (set[str] | None) = None) -> None {
     # Use _entry.js to avoid conflict with compiled modules that may be named main.js
     entry_file = self.compiled_dir / '_entry.js';
     if self._has_pages {
         # File-based routing mode: import from generated _routes.js
         entry_content = self._create_pages_entry_content(module_path);
     } else {
-        # Explicit routing mode: import app from entry module (original behavior)
+        # Explicit routing mode: import app from entry module
         app_module_name = module_path.stem;
-        entry_content = f'import React from "react";\nimport {{ createRoot }} from "react-dom/client";\nimport {{ app as App }} from "./{app_module_name}.js";\nimport {{ JacClientErrorBoundary, ErrorFallback, __jacInstallErrorHandlers }} from "@jac/runtime";\n\n__jacInstallErrorHandlers();\nconst root = createRoot(document.getElementById("root"));\nroot.render(\n\tReact.createElement(\n\t\tJacClientErrorBoundary,{{ FallbackComponent: ErrorFallback }},\n\t\tReact.createElement(App, null)\n\t)\n);\n';
+        # Resolve actual app export name from client exports
+        app_export_name = self._resolve_app_export(client_exports);
+        entry_content = f'import React from "react";\nimport {{ createRoot }} from "react-dom/client";\nimport {{ {app_export_name} as App }} from "./{app_module_name}.js";\nimport {{ JacClientErrorBoundary, ErrorFallback, __jacInstallErrorHandlers }} from "@jac/runtime";\n\n__jacInstallErrorHandlers();\nconst root = createRoot(document.getElementById("root"));\nroot.render(\n\tReact.createElement(\n\t\tJacClientErrorBoundary,{{ FallbackComponent: ErrorFallback }},\n\t\tReact.createElement(App, null)\n\t)\n);\n';
     }
     entry_file.write_text(entry_content, encoding='utf-8');
+}
+
+"""Resolve the app entry point export name from client exports.
+
+Prefers names ending with '_app', then 'app', then first available export.
+Falls back to 'app' if no exports provided.
+"""
+impl ViteCompiler._resolve_app_export(self: ViteCompiler, client_exports: (set[str] | None) = None) -> str {
+    if (not client_exports) {
+        return 'app';
+    }
+    exports_list = sorted(client_exports);
+    # Prefer names ending with _app (e.g., jac_app)
+    for name in exports_list {
+        if name.endswith('_app') {
+            return name;
+        }
+    }
+    # Then check for exact 'app'
+    if 'app' in client_exports {
+        return 'app';
+    }
+    # Fall back to first export
+    if exports_list {
+        return exports_list[0];
+    }
+    return 'app';
 }
 
 impl ViteCompiler._create_pages_entry_content(

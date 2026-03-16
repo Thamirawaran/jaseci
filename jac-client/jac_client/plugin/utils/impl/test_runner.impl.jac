@@ -373,7 +373,7 @@ impl run_client_tests(cl_files: list[str], base_dir: str, entry_point: str = "")
         import tomllib;
         # Ensure playwright browsers are installed
         subprocess.run(
-            ['npx', 'playwright', 'install', '--with-deps', 'chromium'],
+            ['npx', 'playwright', 'install', 'chromium'],
             cwd=str(test_output_dir),
             capture_output=True
         );

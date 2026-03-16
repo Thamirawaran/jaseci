@@ -3226,6 +3226,12 @@ impl EsastGenPass.populate_client_manifest(nd: uni.Module) -> None {
     for mod in nd.impl_mod {
         self._populate_client_manifest(mod);
     }
+    for variant in nd.variant_mod {
+        self._populate_client_manifest(variant);
+        for vimpl in variant.impl_mod {
+            self._populate_client_manifest(vimpl);
+        }
+    }
 }
 
 """Process module node."""
