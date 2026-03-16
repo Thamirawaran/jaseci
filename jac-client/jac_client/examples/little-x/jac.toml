@@ -5,6 +5,9 @@ description = "Jac client application: little-x"
 entry-point = "main.jac"
 
 [plugins.client]
-# Vite bundler configuration (optional overrides)
-# vite.plugins = []
-# vite.build = {}
+
+[dependencies.npm]
+jac-client-node = "1.0.7"
+
+[dependencies.npm.dev]
+"@jac-client/dev-deps" = "2.0.0"
