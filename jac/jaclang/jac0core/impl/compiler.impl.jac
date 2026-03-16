@@ -554,11 +554,11 @@ impl JacCompiler.parse_str(
         import from jaclang.jac0core.parser { parse as rd_parse }
         (mod, had_error) = rd_parse(source_str, file_path, prog=target_program);
         _recalculate_parents(mod);
-        if file_path.endswith('.cl.jac') {
+        if file_path.endswith('.cl.jac') or file_path.endswith('.cl.test.jac') {
             _coerce_client_module(mod);
-        } elif file_path.endswith('.sv.jac') {
+        } elif file_path.endswith('.sv.jac') or file_path.endswith('.sv.test.jac') {
             _coerce_server_module(mod);
-        } elif file_path.endswith('.na.jac') {
+        } elif file_path.endswith('.na.jac') or file_path.endswith('.na.test.jac') {
             _coerce_native_module(mod);
         }
     }

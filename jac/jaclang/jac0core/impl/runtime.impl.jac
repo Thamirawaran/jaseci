@@ -1216,22 +1216,285 @@ impl JacBasics.run_test(
     verbose: bool = False
 ) -> int {
     import from jaclang.runtimelib.test { JacTestCheck }
+
+    def _run_cl_tests(cl_files: list[str], base: str) -> int {
+        """Compile .cl.test.jac files to JS and run via bun test."""
+        import subprocess;
+        import json;
+        import shutil;
+        import from pathlib { Path }
+        import from jaclang.jac0core.runtime { JacRuntime as Jac }
+        try {
+            import from jac_client.plugin.utils { ensure_bun_available }
+        } except ImportError {
+            JacConsole.get_console().warning(
+                'jac-client package not installed. Skipping client tests.\n'
+                'Install with: pip install jac-client'
+            );
+            return 0;
+        }
+        console = JacConsole.get_console();
+        if not ensure_bun_available() {
+            console.error('Bun is required for client tests. Install: https://bun.sh');
+            return 1;
+        }
+        test_output_dir = Path(base) / '.jac' / 'test-output';
+        runners_dir = test_output_dir / 'runners';
+        test_output_dir.mkdir(parents=True, exist_ok=True);
+        runners_dir.mkdir(parents=True, exist_ok=True);
+
+        # Compile test runners from .cl.jac source in jac-client package
+        import jac_client.plugin as _cl_plugin;
+        plugin_dir = Path(list(_cl_plugin.__path__)[0]);
+        test_runtime_dir = plugin_dir / 'test_runtime';
+        for (runner_jac, runner_dest) in [
+            ('it_runner.cl.jac', 'it.js'),
+            ('e2e_runner.cl.jac', 'e2e.js')
+        ] {
+            runner_src = test_runtime_dir / runner_jac;
+            runner_out = runners_dir / runner_dest;
+            if runner_src.exists() {
+                runner_key = str(runner_src.resolve());
+                Jac.program.errors_had.clear();
+                if runner_key in Jac.program.mod.hub {
+                    del Jac.program.mod.hub[runner_key];
+                }
+                runner_mod = Jac.program.compile(runner_key);
+                runner_js = (runner_mod.gen.js or '') if runner_mod else '';
+                if runner_js {
+                    runner_out.write_text(runner_js, encoding='utf-8');
+                } else {
+                    console.warning(f'Failed to compile runner: {runner_jac}');
+                }
+                Jac.program.errors_had.clear();
+            }
+        }
+
+        # Copy client runtime if available
+        client_runtime_src = plugin_dir / 'client_runtime.js';
+        if client_runtime_src.exists() {
+            shutil.copy2(str(client_runtime_src), str(test_output_dir / 'client_runtime.js'));
+        }
+
+        # Compile each test file
+        compiled_files: list[str] = [];
+        for test_file in cl_files {
+            source_path = Path(test_file).resolve();
+            source_key = str(source_path);
+            console.info(f'\n\t\t* Compiling {test_file} *');
+            Jac.program.errors_had.clear();
+            if source_key in Jac.program.mod.hub {
+                del Jac.program.mod.hub[source_key];
+            }
+            mod = Jac.program.compile(source_key);
+            if Jac.program.errors_had {
+                errors = '\n'.join(str(err) for err in Jac.program.errors_had);
+                console.error(f'Compile error in {test_file}:\n{errors}');
+                Jac.program.errors_had.clear();
+                continue;
+            }
+            js_code = mod.gen.js or '';
+            if not js_code {
+                console.warning(f'No JS generated for {test_file}');
+                continue;
+            }
+            # Add __jacJsx import if needed
+            jac_runtime_import = 'import {__jacJsx, __jacSpawn} from "@jac/runtime";';
+            if '__jacJsx' in js_code and jac_runtime_import not in js_code {
+                js_code = jac_runtime_import + '\n' + js_code;
+            }
+            # Write compiled test — detect runner type from generated JS
+            test_name = source_path.stem;
+            if test_name.endswith('.cl.test') {
+                test_name = test_name[:-8];
+            } elif test_name.endswith('.cl') {
+                test_name = test_name[:-3];
+            }
+            has_it = 'ItRunner' in js_code;
+            has_e2e = 'E2eRunner' in js_code;
+            if has_e2e {
+                output_filename = f'{test_name}.e2e.test.js';
+            } else {
+                output_filename = f'{test_name}.it.test.jsx';
+            }
+            # Rewrite @jac/ imports to relative paths
+            js_code = js_code.replace(
+                'from "@jac/test-runtime/it"', 'from "./runners/it.js"'
+            );
+            js_code = js_code.replace(
+                'from "@jac/test-runtime/e2e"', 'from "./runners/e2e.js"'
+            );
+            js_code = js_code.replace(
+                'from "@jac/runtime"', 'from "./client_runtime.js"'
+            );
+            output_path = test_output_dir / output_filename;
+            output_path.write_text(js_code, encoding='utf-8');
+            compiled_files.append(str(output_path));
+            console.success(f'Compiled: {test_file} -> {output_filename}');
+
+            # Compile dependencies referenced in the manifest
+            manifest = mod.gen.client_manifest if mod else None;
+            if manifest and manifest.imports {
+                for (import_key, import_resolved) in manifest.imports.items() {
+                    if import_key.startswith('@jac/') {
+                        continue;
+                    }
+                    dep_path = None;
+                    candidates = [
+                        Path(import_resolved + '.jac'),
+                        Path(import_resolved),
+                        source_path.parent / (import_key + '.jac'),
+                    ];
+                    for candidate in candidates {
+                        if candidate.exists() and str(candidate).endswith('.jac') {
+                            dep_path = candidate.resolve();
+                            break;
+                        }
+                    }
+                    if dep_path is None {
+                        continue;
+                    }
+                    dep_key = str(dep_path);
+                    Jac.program.errors_had.clear();
+                    if dep_key in Jac.program.mod.hub {
+                        del Jac.program.mod.hub[dep_key];
+                    }
+                    dep_mod = Jac.program.compile(dep_key);
+                    dep_js = (dep_mod.gen.js or '') if dep_mod else '';
+                    if dep_js {
+                        if '__jacJsx' in dep_js and jac_runtime_import not in dep_js {
+                            dep_js = jac_runtime_import + '\n' + dep_js;
+                        }
+                        dep_output_file = test_output_dir / f'{import_key}.js';
+                        dep_output_file.write_text(dep_js, encoding='utf-8');
+                        console.success(f'Compiled dep: {dep_path.name} -> {import_key}.js');
+                    }
+                    Jac.program.errors_had.clear();
+                }
+            }
+        }
+
+        if not compiled_files {
+            console.warning('No client test files compiled successfully.');
+            return 0;
+        }
+
+        # Generate config files
+        tsconfig = json.dumps({
+            "compilerOptions": {
+                "jsx": "react-jsx",
+                "module": "esnext",
+                "moduleResolution": "bundler",
+                "paths": {
+                    "@jac/runtime": ["./client_runtime.js"],
+                    "@jac/test-runtime/*": ["./runners/*"]
+                }
+            }
+        }, indent=2);
+        (test_output_dir / 'tsconfig.json').write_text(tsconfig, encoding='utf-8');
+
+        package_json = json.dumps({
+            "name": "jac-test-output",
+            "type": "module",
+            "private": True,
+            "dependencies": {
+                "@testing-library/react": ">=14.0.0",
+                "@testing-library/jest-dom": ">=6.0.0",
+                "@testing-library/user-event": ">=14.0.0",
+                "@happy-dom/global-registrator": ">=15.0.0",
+                "happy-dom": ">=15.0.0",
+                "react": "^19.0.0",
+                "react-dom": "^19.0.0"
+            }
+        }, indent=2);
+        (test_output_dir / 'package.json').write_text(package_json, encoding='utf-8');
+
+        bunfig = '[test]\npreload = ["./setup.ts"]';
+        (test_output_dir / 'bunfig.toml').write_text(bunfig, encoding='utf-8');
+
+        setup_ts = 'import { GlobalRegistrator } from "@happy-dom/global-registrator";\nGlobalRegistrator.register();\nimport "@testing-library/jest-dom";';
+        (test_output_dir / 'setup.ts').write_text(setup_ts, encoding='utf-8');
+
+        # Install dependencies if needed
+        if not (test_output_dir / 'node_modules').exists() {
+            console.info('Installing test dependencies...');
+            subprocess.run(
+                ['bun', 'install'], cwd=str(test_output_dir),
+                capture_output=True
+            );
+        }
+
+        # Run tests
+        ret = 0;
+        it_files = [f for f in compiled_files if '.it.test.' in f];
+        e2e_files = [f for f in compiled_files if '.e2e.test.' in f];
+
+        if it_files {
+            console.info('\n\t\t* Running component tests (bun test) *');
+            result = subprocess.run(
+                ['bun', 'test'] + it_files,
+                cwd=str(test_output_dir)
+            );
+            ret += result.returncode;
+        }
+        if e2e_files {
+            console.info('\n\t\t* Running E2E tests (playwright) *');
+            result = subprocess.run(
+                ['npx', 'playwright', 'test'] + e2e_files,
+                cwd=str(test_output_dir)
+            );
+            ret += result.returncode;
+        }
+        return ret;
+    }
+
     test_file = False;
     ret_count = 0;
     if filepath {
         if filepath.endswith('.jac') {
-            (base, mod_name) = os.path.split(filepath);
-            base = base or './';
-            mod_name = mod_name[:-4];
-            if mod_name.endswith('.test') {
-                mod_name = mod_name[:-5];
+            _fname = os.path.basename(filepath);
+            # Route client test files to bun test runner
+            if _fname.endswith('.cl.test.jac') {
+                test_file = True;
+                ret_count = _run_cl_tests(
+                    [os.path.abspath(filepath)],
+                    os.path.dirname(os.path.abspath(filepath)) or os.getcwd()
+                );
+            } elif _fname.endswith('.cl.jac') {
+                # Base client module — discover its .cl.test.jac annex
+                import from jaclang.jac0core.bccache { discover_annex_files }
+                _cl_test_files = discover_annex_files(
+                    os.path.abspath(filepath), '.test.jac'
+                );
+                _cl_test_files = [
+                    f for f in _cl_test_files if f.endswith('.cl.test.jac')
+                ];
+                if _cl_test_files {
+                    test_file = True;
+                    ret_count = _run_cl_tests(
+                        _cl_test_files,
+                        os.path.dirname(os.path.abspath(filepath)) or os.getcwd()
+                    );
+                } else {
+                    JacConsole.get_console().warning(
+                        f'No client test file found for {filepath}. '
+                        f'Expected: {_fname.replace(".cl.jac", ".cl.test.jac")}'
+                    );
+                }
+            } else {
+                (base, mod_name) = os.path.split(filepath);
+                base = base or './';
+                mod_name = mod_name[:-4];
+                if mod_name.endswith('.test') {
+                    mod_name = mod_name[:-5];
+                }
+                JacTestCheck.reset();
+                JacRuntimeInterface.jac_import(target=mod_name, base_path=base);
+                JacTestCheck.run_test(
+                    xit, maxfail, verbose, os.path.abspath(filepath), func_name
+                );
+                ret_count = JacTestCheck.failcount;
             }
-            JacTestCheck.reset();
-            JacRuntimeInterface.jac_import(target=mod_name, base_path=base);
-            JacTestCheck.run_test(
-                xit, maxfail, verbose, os.path.abspath(filepath), func_name
-            );
-            ret_count = JacTestCheck.failcount;
         } else {
             JacConsole.get_console().error('Not a .jac file.');
         }
@@ -1240,6 +1503,7 @@ impl JacBasics.run_test(
     }
     if (filter or directory) {
         current_dir = directory or os.getcwd();
+        cl_test_files: list[str] = [];
         for (root_dir, _, files) in os.walk(current_dir, topdown=True) {
             files = [
                 file
@@ -1248,10 +1512,17 @@ impl JacBasics.run_test(
             ]
                 if filter
                 else files;
+            # Separate client test files from server test files
+            for file in files {
+                if file.endswith('.cl.test.jac') {
+                    cl_test_files.append(os.path.join(root_dir, file));
+                }
+            }
             files = [
                 file
                 for file in files
                 if not file.endswith(('.test.jac', '.impl.jac'))
+                and '.cl.' not in file
             ];
             for file in files {
                 if file.endswith('.jac') {
@@ -1276,6 +1547,11 @@ impl JacBasics.run_test(
         JacTestCheck.breaker = False;
         ret_count += JacTestCheck.failcount;
         JacTestCheck.failcount = 0;
+        # Run collected client tests via bun
+        if cl_test_files {
+            test_file = True;
+            ret_count += _run_cl_tests(cl_test_files, current_dir);
+        }
         if not test_file {
             JacConsole.get_console().warning('No test files found.');
         }

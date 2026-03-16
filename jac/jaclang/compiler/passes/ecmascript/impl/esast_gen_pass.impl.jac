@@ -67,7 +67,6 @@ impl EsastGenPass.exit_token(nd: uni.Token) -> None {
 
 """Process test as a function."""
 impl EsastGenPass.exit_test(nd: uni.Test) -> None {
-    params: list[es.Pattern] = [];
     body_stmts: list[es.Statement] = [];
     if nd.body {
         for stmt in nd.body {
@@ -82,11 +81,107 @@ impl EsastGenPass.exit_test(nd: uni.Test) -> None {
     }
     body_stmts = self._prepend_hoisted(nd, body_stmts);
     block = self.sync_loc(es.BlockStatement(body=body_stmts), jac_node=nd);
-    func_id = self.sync_loc(es.Identifier(name=nd.name.sym_name), jac_node=nd.name);
-    func_decl = self.sync_loc(
-        es.FunctionDeclaration(id=func_id, params=params, body=block), jac_node=nd
+
+    # Detect @jactest.it / @jactest.e2e decorator
+    runner_type: str | None = None;
+    modifier: str = "run";
+    if nd.decorators {
+        for dec in nd.decorators {
+            if isinstance(dec, uni.AtomTrailer) {
+                # @jactest.it.skip -> AtomTrailer(target=AtomTrailer(target=NameAtom("jactest"), right=NameAtom("it")), right=NameAtom("skip"))
+                # @jactest.it -> AtomTrailer(target=NameAtom("jactest"), right=NameAtom("it"))
+                if (isinstance(dec.target, uni.AtomTrailer)
+                    and isinstance(dec.target.target, uni.NameAtom)
+                    and dec.target.target.sym_name == "jactest"
+                    and isinstance(dec.target.right, uni.NameAtom)
+                    and isinstance(dec.right, uni.NameAtom)) {
+                    runner_type = dec.target.right.sym_name;
+                    modifier = dec.right.sym_name;
+                    break;
+                } elif (isinstance(dec.target, uni.NameAtom)
+                    and dec.target.sym_name == "jactest"
+                    and isinstance(dec.right, uni.NameAtom)) {
+                    runner_type = dec.right.sym_name;
+                    modifier = "run";
+                    break;
+                }
+            }
+        }
+    }
+
+    if runner_type is None {
+        # No jactest decorator — emit plain FunctionDeclaration (existing behavior)
+        func_id = self.sync_loc(es.Identifier(name=nd.name.sym_name), jac_node=nd.name);
+        func_decl = self.sync_loc(
+            es.FunctionDeclaration(id=func_id, params=[], body=block), jac_node=nd
+        );
+        nd.gen.es_ast = func_decl;
+        return;
+    }
+
+    # Determine runner name and utility names
+    is_e2e = runner_type == "e2e";
+    runner_name = "E2eRunner" if is_e2e else "ItRunner";
+    if is_e2e {
+        util_names = ["page", "expect", "browser", "context"];
+    } else {
+        util_names = ["render", "screen", "expect", "fireEvent", "waitFor",
+                      "within", "act", "renderHook", "userEvent"];
+    }
+
+    # Build test name literal
+    test_name = nd.description.lit_value if nd.description else nd.name.sym_name;
+    name_lit = self.sync_loc(es.Literal(value=test_name, raw=f'"{test_name}"'), jac_node=nd);
+
+    # Build: Runner.modifier(name, callback) or Runner.modifier(name) for todo
+    callee = self.sync_loc(
+        es.MemberExpression(
+            object=self.sync_loc(es.Identifier(name=runner_name), jac_node=nd),
+            property=self.sync_loc(es.Identifier(name=modifier), jac_node=nd),
+            computed=False
+        ),
+        jac_node=nd
     );
-    nd.gen.es_ast = func_decl;
+
+    if modifier == "todo" {
+        # Runner.todo("name") — no callback
+        call_expr = self.sync_loc(
+            es.CallExpression(callee=callee, arguments=[name_lit]),
+            jac_node=nd
+        );
+    } else {
+        # Build destructured parameter: ({ render, screen, ... }) => { ...body... }
+        props: list[es.AssignmentProperty] = [];
+        for uname in util_names {
+            uid = self.sync_loc(es.Identifier(name=uname), jac_node=nd);
+            props.append(self.sync_loc(
+                es.AssignmentProperty(key=uid, value=uid, shorthand=True),
+                jac_node=nd
+            ));
+        }
+        obj_pattern = self.sync_loc(es.ObjectPattern(properties=props), jac_node=nd);
+        arrow_fn = self.sync_loc(
+            es.ArrowFunctionExpression(
+                params=[obj_pattern],
+                body=block,
+                async_=is_e2e
+            ),
+            jac_node=nd
+        );
+        call_expr = self.sync_loc(
+            es.CallExpression(callee=callee, arguments=[name_lit, arrow_fn]),
+            jac_node=nd
+        );
+    }
+
+    nd.gen.es_ast = self.sync_loc(es.ExpressionStatement(expression=call_expr), jac_node=nd);
+
+    # Set flags for import injection
+    if is_e2e {
+        self.needs_e2e_runner = True;
+    } else {
+        self.needs_it_runner = True;
+    }
 }
 
 """Process client block (cl { ... })."""
@@ -3176,6 +3271,25 @@ impl EsastGenPass.exit_module(nd: uni.Module) -> None {
         );
         body.append(jac_rt_decl);
     }
+    # Inject test runner imports if any test used @jactest.it / @jactest.e2e
+    if self.needs_it_runner {
+        body.insert(0, es.ImportDeclaration(
+            specifiers=[es.ImportSpecifier(
+                imported=es.Identifier(name='ItRunner'),
+                local=es.Identifier(name='ItRunner')
+            )],
+            source=es.Literal(value='@jac/test-runtime/it', raw='"@jac/test-runtime/it"')
+        ));
+    }
+    if self.needs_e2e_runner {
+        body.insert(0, es.ImportDeclaration(
+            specifiers=[es.ImportSpecifier(
+                imported=es.Identifier(name='E2eRunner'),
+                local=es.Identifier(name='E2eRunner')
+            )],
+            source=es.Literal(value='@jac/test-runtime/e2e', raw='"@jac/test-runtime/e2e"')
+        ));
+    }
     merged_body = self._merge_module_bodies(nd);
     client_items: list[es.Statement | list[es.Statement] | None] = [];
     fallback_items: list[es.Statement | list[es.Statement] | None] = [];
@@ -3761,6 +3875,9 @@ impl EsastGenPass.before_pass -> None {
     self.sv_import_stubs: list[es.Statement] = [];
     # Track whether generated code uses _jac runtime (primitive emitter produced _jac.* calls)
     self.needs_jac_runtime: bool = False;
+    # Track whether generated code uses test runners
+    self.needs_it_runner: bool = False;
+    self.needs_e2e_runner: bool = False;
     # Primitive emitter instances for codegen dispatch (lazily initialized to avoid circular imports)
     self._primitive_emitters: dict[str, object] | None = None;
     self._builtin_emitter: object | None = None;
