@@ -302,45 +302,42 @@ def logout_action -> None {
 }
 
 # Main App component with declarative router
-def:pub App -> JsxElement {
-    # Create routes array manually (workaround for JS compiler bug with named args)
-    login_route = {
-        "path": "/login",
-        "component": lambda -> Any { return LoginForm(); },
-        "guard": None
-    };
-    signup_route = {
-        "path": "/signup",
-        "component": lambda -> Any { return SignupForm(); },
-        "guard": None
-    };
-    home_route = {
-        "path": "/home",
-        "component": lambda -> Any { return HomeView(); },
-        "guard": jacIsLoggedIn
-    };
-    profile_route = {
-        "path": "/profile",
-        "component": lambda -> Any { return ProfileView(); },
-        "guard": jacIsLoggedIn
-    };
+def GuardedHome -> JsxElement {
+    if not jacIsLoggedIn() {
+        return <Navigate to="/login" />;
+    }
+    return HomeView();
+}
 
-    routes = [login_route, signup_route, home_route, profile_route];
-    router = initRouter(routes, "/login");
+def GuardedProfile -> JsxElement {
+    if not jacIsLoggedIn() {
+        return <Navigate to="/login" />;
+    }
+    return ProfileView();
+}
 
-    # Get current path for navbar
-    currentPath = router.path();
+def AppRoutes -> JsxElement {
+    location = useLocation();
+    currentPath = str(location.pathname);
 
     return
         <div class="app-container">
             {build_nav_bar(currentPath)}
-            <Rotate>
-                <span>
-                    😂
-                </span>
-            </Rotate>
-            {router.render()}
+            <Routes>
+                <Route path="/login" element={LoginForm()} />
+                <Route path="/signup" element={SignupForm()} />
+                <Route path="/home" element={GuardedHome()} />
+                <Route path="/profile" element={GuardedProfile()} />
+                <Route path="*" element={<Navigate to="/login" />} />
+            </Routes>
         </div>;
+}
+
+def:pub App -> JsxElement {
+    return
+        <Router>
+            <AppRoutes />
+        </Router>;
 }
 
 # Helper to build navigation bar

@@ -5,8 +5,34 @@ impl JacToJSCompiler.add_runtime_imports(js_code: str) -> str {
     if "function __jacJsx(" in js_code {
         return js_code;
     }
-    jac_jsx_import = 'import {__jacJsx, __jacSpawn} from "@jac/runtime";';
-    return f"{jac_jsx_import}\n{js_code}";
+    # All known runtime exports that user code may reference
+    all_runtime_symbols: list[str] = [
+        '__jacJsx', '__jacSpawn', '__jacCallFunction', '__jacReportError',
+        '__jacInstallErrorHandlers', '__createJacSchema',
+        '__doWalkerFetch', '__doFuncFetch', '__cachedEndpointCall',
+        '__cacheGet', '__cacheSet', '__evictOldest', '__isFresh',
+        '__getCacheState', '__getEndpointEffects',
+        '__getApiBaseUrl', '__getLocalStorage', '__setLocalStorage',
+        '__removeLocalStorage', '__invalidateEndpoint', '__overlaps',
+        'jacSpawn', 'jacSignup', 'jacLogin', 'jacLogout', 'jacIsLoggedIn',
+        'navigate', 'useRouter', 'useNavigate', 'useLocation', 'useParams',
+        'useState', 'useEffect', 'useJacForm',
+        'AuthGuard', 'ErrorFallback', 'errorOverlay',
+        'JacForm', 'JacSchema', 'JacClientErrorBoundary',
+        'Router', 'Routes', 'Route', 'Link', 'Navigate', 'Outlet'
+    ];
+    # Find which runtime symbols are actually used in this code
+    needed: list[str] = [];
+    for sym in all_runtime_symbols {
+        if sym in js_code {
+            needed.append(sym);
+        }
+    }
+    if not needed {
+        needed = ['__jacJsx', '__jacSpawn'];
+    }
+    import_line = 'import {' + ', '.join(sorted(needed)) + '} from "@jac/runtime";';
+    return f"{import_line}\n{js_code}";
 }
 
 """Extract client globals from manifest and module."""

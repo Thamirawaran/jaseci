@@ -8,6 +8,11 @@ entry-point = "main.jac"
 
 [dependencies.npm]
 jac-client-node = "1.0.7"
+lodash = "latest"
+antd = "latest"
+pluralize = "latest"
+react-animated-components = "latest"
+styled-components = "latest"
 
 [dependencies.npm.dev]
 "@jac-client/dev-deps" = "2.0.0"

@@ -2,7 +2,6 @@ import datetime;
 cl import from lodash { * as _ }
 cl import from antd { Button, Input, Card, Typography, Space }
 cl import from pluralize { default as pluralize }
-cl import from 'react-animated-components' { Rotate }
 
 node Profile {
     has username: str = "";

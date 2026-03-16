@@ -15,7 +15,7 @@
 
 @ jactest.e2e test "signup page loads with form" {
     await page.goto("/signup");
-    await expect(page.locator("text=Sign up for LittleX")).toBeVisible();
+    await expect(page.locator("text=Sign Up for LittleX")).toBeVisible();
 }
 
 @ jactest.e2e test "unauthenticated user redirected to login from home" {
