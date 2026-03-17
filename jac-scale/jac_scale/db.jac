@@ -18,6 +18,7 @@ import from bson { ObjectId }
 import from uuid { uuid4 }
 import from jaclang.runtimelib.serializer { Serializer }
 import from jaclang { JacRuntimeInterface }
+import from jaclang.jac0core.archetype { Anchor }
 import json;
 
 glob _mongo_clients: dict[str, MongoClient] = {},

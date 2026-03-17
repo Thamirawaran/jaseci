@@ -381,7 +381,12 @@ impl Db.find_nodes(
     for doc in col.find(mongo_filter) {
         if (data := doc.get('data')) {
             if (anchor := Serializer.deserialize(data)) {
-                if anchor?.archetype {
+                if anchor?.archetype and isinstance(anchor, Anchor) {
+                    # Verify read access before returning
+                    if jctx is not None
+                    and not JacRuntimeInterface.check_read_access(anchor) {
+                        continue;
+                    }
                     # Sync to memory handler so graph operations work on these nodes
                     if jctx is not None {
                         jctx.mem.put(anchor);
