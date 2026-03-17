@@ -59,26 +59,12 @@ impl CompilerBridge.parse_snippet(
 
         try {
             program = JacProgram();
-            compiler = Jac.get_compiler();
 
-            old_stderr = sys.stderr;
-            captured = io.StringIO();
-            sys.stderr = captured;
-
-            try {
-                ir = compiler.compile(tmp_path, program);
-            } finally {
-                sys.stderr = old_stderr;
-            }
+            ir = program.parse_str(code, tmp_path);
 
             errors: list[dict] = [];
-            stderr_output = captured.getvalue();
-            if stderr_output.strip() {
-                for line in stderr_output.strip().split("\n") {
-                    if line.strip() {
-                        errors.append({"line": 0, "col": 0, "message": line.strip()});
-                    }
-                }
+            for e in program.errors_had {
+                errors.append({"line": 0, "col": 0, "message": str(e)});
             }
 
             valid = len(errors) == 0 and ir is not None;
@@ -129,28 +115,15 @@ impl CompilerBridge.typecheck_snippet(
             program = JacProgram();
             compiler = Jac.get_compiler();
 
-            old_stderr = sys.stderr;
-            captured = io.StringIO();
-            sys.stderr = captured;
-
-            try {
-                ir = compiler.compile(tmp_path, program);
-            } finally {
-                sys.stderr = old_stderr;
-            }
+            ir = compiler.compile(tmp_path, program);
 
             errors: list[dict] = [];
             warnings: list[dict] = [];
-            stderr_output = captured.getvalue();
-            if stderr_output.strip() {
-                for line in stderr_output.strip().split("\n") {
-                    line = line.strip();
-                    if "warning" in line.lower() {
-                        warnings.append({"line": 0, "col": 0, "message": line});
-                    } elif line {
-                        errors.append({"line": 0, "col": 0, "message": line});
-                    }
-                }
+            for e in program.errors_had {
+                errors.append({"line": 0, "col": 0, "message": str(e)});
+            }
+            for w in program.warnings_had {
+                warnings.append({"line": 0, "col": 0, "message": str(w)});
             }
 
             valid = len(errors) == 0 and ir is not None;

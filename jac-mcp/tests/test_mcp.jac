@@ -300,6 +300,15 @@ test "parse valid code" {
     assert isinstance(result, dict);
     assert "valid" in result;
     assert "errors" in result;
+    assert result["valid"] == True;
+    assert len(result["errors"]) == 0;
+}
+
+test "parse invalid code" {
+    result = CompilerBridge.parse_snippet("this is not valid @@@ !!!");
+    assert isinstance(result, dict);
+    assert result["valid"] == False;
+    assert len(result["errors"]) > 0;
 }
 
 test "parse empty code" {
