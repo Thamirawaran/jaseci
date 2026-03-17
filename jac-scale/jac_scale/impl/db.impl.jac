@@ -349,17 +349,17 @@ impl Db.find_nodes(
     for (key, value) in filter.items() {
         mongo_filter[f"data.archetype.{key}"] = value;
     }
+    # Try to get runtime context (used for root auto-filter, access checks, and memory sync)
+    jctx = None;
+    try {
+        jctx = JacRuntimeInterface.get_context();
+    } except Exception { }
     # Access control: filter by root (graph/owner isolation)
     if root is not None {
         mongo_filter["data.root"] = root;
-    } else {
+    } elif jctx is not None and jctx.user_root {
         # Auto-filter by current user's root for secure-by-default behavior
-        try {
-            jctx = JacRuntimeInterface.get_context();
-            if jctx.user_root {
-                mongo_filter["data.root"] = str(jctx.user_root.id);
-            }
-        } except Exception { }
+        mongo_filter["data.root"] = str(jctx.user_root.id);
     }
     # Traversal metadata filters
     if edges is not None {
@@ -373,22 +373,15 @@ impl Db.find_nodes(
     }
     col = self._get_mongo_collection(col_name);
     results: list = [];
-    # Try to get runtime context for memory sync
-    jctx = None;
-    try {
-        jctx = JacRuntimeInterface.get_context();
-    } except Exception { }
     for doc in col.find(mongo_filter) {
         if (data := doc.get('data')) {
             if (anchor := Serializer.deserialize(data)) {
                 if anchor?.archetype and isinstance(anchor, Anchor) {
-                    # Verify read access before returning
-                    if jctx is not None
-                    and not JacRuntimeInterface.check_read_access(anchor) {
-                        continue;
-                    }
-                    # Sync to memory handler so graph operations work on these nodes
+                    # If runtime context exists, enforce access and sync to memory
                     if jctx is not None {
+                        if not JacRuntimeInterface.check_read_access(anchor) {
+                            continue;
+                        }
                         jctx.mem.put(anchor);
                     }
                     results.append(anchor.archetype);
