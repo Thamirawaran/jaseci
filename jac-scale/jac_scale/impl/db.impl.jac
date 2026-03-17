@@ -329,7 +329,13 @@ def get_db -> Db {
 }
 
 impl Db.find_nodes(
-    node_type: str, filter: dict = {}, col_name: str = '_anchors'
+    node_type: str,
+    filter: dict = {},
+    col_name: str = '_anchors',
+    `root: (str | None) = None,
+    edges: (list[str] | None) = None,
+    source: (str | None) = None,
+    target: (str | None) = None
 ) -> list {
     if self.db_type == DatabaseType.REDIS {
         raise NotImplementedError(
@@ -342,6 +348,28 @@ impl Db.find_nodes(
     # Add user-provided filters on archetype attributes
     for (key, value) in filter.items() {
         mongo_filter[f"data.archetype.{key}"] = value;
+    }
+    # Access control: filter by root (graph/owner isolation)
+    if root is not None {
+        mongo_filter["data.root"] = root;
+    } else {
+        # Auto-filter by current user's root for secure-by-default behavior
+        try {
+            jctx = JacRuntimeInterface.get_context();
+            if jctx.user_root {
+                mongo_filter["data.root"] = str(jctx.user_root.id);
+            }
+        } except Exception { }
+    }
+    # Traversal metadata filters
+    if edges is not None {
+        mongo_filter["data.edges"] = {"$all": edges};
+    }
+    if source is not None {
+        mongo_filter["data.source"] = source;
+    }
+    if target is not None {
+        mongo_filter["data.target"] = target;
     }
     col = self._get_mongo_collection(col_name);
     results: list = [];

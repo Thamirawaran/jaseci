@@ -218,6 +218,12 @@ obj Db {
     def scan_keys(pattern: str, col_name: str = 'default') -> list[str];
 
     def find_nodes(
-        node_type: str, filter: dict = {}, col_name: str = '_anchors'
+        node_type: str,
+        filter: dict = {},
+        col_name: str = '_anchors',
+        `root: (str | None) = None,
+        edges: (list[str] | None) = None,
+        source: (str | None) = None,
+        target: (str | None) = None
     ) -> list;
 }
