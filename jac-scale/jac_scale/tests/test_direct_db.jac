@@ -384,3 +384,104 @@ test "_anchors collection is read-only" {
 
     cleanup_connections();
 }
+
+# ===== FIND_NODES METADATA FILTERS =====
+test "find_nodes root filter" {
+    import from jaclang.runtimelib.serializer { Serializer }
+    import from uuid { uuid4 }
+
+    node FilterNode {
+        has name: str,
+            role: str = "member";
+    }
+    db = kvstore(db_name="test_find_nodes_root", db_type="mongodb", uri=MONGO_URI);
+
+    root_a = str(uuid4());
+    root_b = str(uuid4());
+
+    # Create nodes and manually set root in serialized data
+    alice = FilterNode(name="Alice", role="admin");
+    bob = FilterNode(name="Bob", role="member");
+    charlie = FilterNode(name="Charlie", role="admin");
+
+    nodes_with_roots = [(alice, root_a), (bob, root_a), (charlie, root_b)];
+    for (nd, root_id) in nodes_with_roots {
+        data = Serializer.serialize(nd.__jac__, include_type=True);
+        data["root"] = root_id;
+        db._get_mongo_collection('_anchors').insert_one(
+            {'_id': str(nd.__jac__.id), 'data': data, 'type': 'NodeAnchor'}
+        );
+    }
+
+    # Filter by root_a — should get Alice and Bob
+    results_a = db.find_nodes('FilterNode', root=root_a);
+    assert len(results_a) == 2 , f"Expected 2 nodes for root_a, got {len(results_a)}";
+    names_a = {n.name for n in results_a};
+    assert names_a == {"Alice","Bob"};
+
+    # Filter by root_b — should get only Charlie
+    results_b = db.find_nodes('FilterNode', root=root_b);
+    assert len(results_b) == 1 , f"Expected 1 node for root_b, got {len(results_b)}";
+    assert results_b[0].name == "Charlie";
+
+    # Combine root + archetype filter
+    admins_a = db.find_nodes('FilterNode', {'role': 'admin'}, root=root_a);
+    assert len(admins_a) == 1;
+    assert admins_a[0].name == "Alice";
+
+    # Clean up
+    db._get_mongo_collection('_anchors').drop();
+    cleanup_connections();
+}
+
+test "find_nodes source and target filter" {
+    import from jaclang.runtimelib.serializer { Serializer }
+    import from uuid { uuid4 }
+    import from jaclang.jac0core.archetype { EdgeAnchor }
+
+    node Person {
+        has name: str;
+    }
+    edge Follows {}
+
+    db = kvstore(db_name="test_find_nodes_edges", db_type="mongodb", uri=MONGO_URI);
+
+    # Create two person nodes
+    alice = Person(name="Alice");
+    bob = Person(name="Bob");
+    alice_id = str(alice.__jac__.id);
+    bob_id = str(bob.__jac__.id);
+
+    # Create an edge anchor: Alice --Follows--> Bob
+    follow_edge = Follows();
+    follow_edge.__jac__ = EdgeAnchor(
+        archetype=follow_edge,
+        source=alice.__jac__,
+        target=bob.__jac__,
+        is_undirected=False
+    );
+
+    # Store the edge in _anchors
+    edge_data = Serializer.serialize(follow_edge.__jac__, include_type=True);
+    db._get_mongo_collection('_anchors').insert_one(
+        {'_id': str(follow_edge.__jac__.id), 'data': edge_data, 'type': 'EdgeAnchor'}
+    );
+
+    # Find edges by source
+    source_results = db.find_nodes('Follows', source=alice_id);
+    assert len(source_results) == 1 , f"Expected 1 edge from Alice, got {len(
+        source_results
+    )}";
+
+    # Find edges by target
+    target_results = db.find_nodes('Follows', target=bob_id);
+    assert len(target_results) == 1 , f"Expected 1 edge to Bob, got {len(target_results)}";
+
+    # No results for wrong source
+    no_results = db.find_nodes('Follows', source=bob_id);
+    assert len(no_results) == 0 , f"Expected 0 edges from Bob, got {len(no_results)}";
+
+    # Clean up
+    db._get_mongo_collection('_anchors').drop();
+    cleanup_connections();
+}
