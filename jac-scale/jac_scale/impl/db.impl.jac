@@ -345,10 +345,19 @@ impl Db.find_nodes(
     }
     col = self._get_mongo_collection(col_name);
     results: list = [];
+    # Try to get runtime context for memory sync
+    jctx = None;
+    try {
+        jctx = JacRuntimeInterface.get_context();
+    } except Exception { }
     for doc in col.find(mongo_filter) {
         if (data := doc.get('data')) {
             if (anchor := Serializer.deserialize(data)) {
                 if anchor?.archetype {
+                    # Sync to memory handler so graph operations work on these nodes
+                    if jctx is not None {
+                        jctx.mem.put(anchor);
+                    }
                     results.append(anchor.archetype);
                 }
             }

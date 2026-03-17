@@ -17,6 +17,7 @@ import from jac_scale.factories.database_factory {
 import from bson { ObjectId }
 import from uuid { uuid4 }
 import from jaclang.runtimelib.serializer { Serializer }
+import from jaclang { JacRuntimeInterface }
 import json;
 
 glob _mongo_clients: dict[str, MongoClient] = {},
