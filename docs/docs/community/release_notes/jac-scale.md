@@ -8,6 +8,7 @@ This document provides a summary of new features, improvements, and bug fixes in
 - **Client-Side Error Reporting Endpoint**: Added `POST /cl/__error__` endpoint to `JacAPIServerCore` for receiving client-side JavaScript errors. Errors are logged via the `jaclang.client_errors` logger and printed to the dev console with stack traces for visibility.
 - **Source-Mapped Error Stack Traces**: Client error stack traces received at `/cl/__error__` are now resolved from bundled JS locations to original `.jac` file paths and exact line numbers via the centralized `SourceMapper` with two-layer resolution.
 - **Client Error Rate Limiting**: The `/cl/__error__` endpoint now deduplicates identical error messages (10s window) and caps at 20 errors per minute to prevent log flooding from render loops or repeated failures.
+- **`find_nodes()` Memory Sync & Access Control**: Nodes returned by `db.find_nodes()` are now live objects. You can connect them (`++>`), update fields, and changes persist on commit. Results are automatically scoped to the current user's graph, so you only see your own nodes. New optional filters (`root`, `edges`, `source`, `target`) enable traversal-based queries directly from the database.
 
 ## jac-scale 0.2.6 (Latest Release)
 
