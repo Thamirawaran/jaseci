@@ -220,7 +220,7 @@ obj Db {
 
     def find_nodes(
         node_type: str,
-        filter: dict = {},
+        filter: (dict | None) = None,
         col_name: str = '_anchors',
         `root: (str | None) = None,
         edges: (list[str] | None) = None,

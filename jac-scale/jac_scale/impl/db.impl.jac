@@ -330,7 +330,7 @@ def get_db -> Db {
 
 impl Db.find_nodes(
     node_type: str,
-    filter: dict = {},
+    filter: (dict | None) = None,
     col_name: str = '_anchors',
     `root: (str | None) = None,
     edges: (list[str] | None) = None,
@@ -346,6 +346,7 @@ impl Db.find_nodes(
     # Build MongoDB query that filters on archetype fields
     mongo_filter: dict = {"data.archetype.__type__": node_type};
     # Add user-provided filters on archetype attributes
+    filter = filter or {};
     for (key, value) in filter.items() {
         mongo_filter[f"data.archetype.{key}"] = value;
     }
