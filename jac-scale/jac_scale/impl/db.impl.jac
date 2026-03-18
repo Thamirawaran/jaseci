@@ -332,7 +332,7 @@ impl Db.find_nodes(
     node_type: str,
     filter: (dict | None) = None,
     col_name: str = '_anchors',
-    `root: (str | None) = None,
+    root: (str | None) = None,
     edges: (list[str] | None) = None,
     source: (str | None) = None,
     target: (str | None) = None
