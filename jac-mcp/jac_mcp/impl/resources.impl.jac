@@ -7,7 +7,6 @@ import from urllib.request { urlopen, Request }
 import from urllib.error { URLError }
 
 glob GITHUB_API_BASE: str = "https://api.github.com/repos/jaseci-labs/jaseci";
-glob GITHUB_RAW_BASE: str = "https://raw.githubusercontent.com/jaseci-labs/jaseci/main";
 glob _github_cache: dict[str, str] = {};
 
 """Find the repo root by walking up from jaclang package location."""
