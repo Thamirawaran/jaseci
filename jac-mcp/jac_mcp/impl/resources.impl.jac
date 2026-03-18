@@ -6,8 +6,8 @@ import json;
 import from urllib.request { urlopen, Request }
 import from urllib.error { URLError }
 
-glob GITHUB_API_BASE: str = "https://api.github.com/repos/jaseci-labs/jaseci";
-glob _github_cache: dict[str, str] = {};
+glob GITHUB_API_BASE: str = "https://api.github.com/repos/jaseci-labs/jaseci",
+     _github_cache: dict[str, str] = {};
 
 """Find the repo root by walking up from jaclang package location."""
 impl find_repo_root -> str | None {
@@ -509,7 +509,13 @@ def _read_example_dir(dir_path: str) -> str {
 """Fetch JSON from a URL, returns parsed dict/list or None on failure."""
 def _github_api_get(url: str) -> Any {
     try {
-        req = Request(url, headers={"Accept": "application/vnd.github.v3+json", "User-Agent": "jac-mcp"});
+        req = Request(
+            url,
+            headers={
+                "Accept": "application/vnd.github.v3+json",
+                "User-Agent": "jac-mcp"
+            }
+        );
         with urlopen(req, timeout=10) as resp {
             return json.loads(resp.read().decode());
         }
@@ -552,7 +558,8 @@ impl ResourceProvider._fetch_github_categories -> list[str] {
         return [];
     }
     categories: list[str] = [
-        item["name"] for item in data
+        item["name"]
+        for item in data
         if item.get("type") == "dir"
         and not item["name"].startswith(".")
         and not item["name"].startswith("_")
