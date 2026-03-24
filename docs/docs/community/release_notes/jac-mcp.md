@@ -8,6 +8,7 @@
 - **`start_server` fix**: Server startup now runs from the project's directory so `jac.toml` is discovered correctly.
 - **Expanded test coverage**: 35 new tests covering all new tools at both the `CompilerBridge` and `ToolProvider` levels.
 - **Richer example descriptions**: `list_examples` now returns a meaningful one-line description per example (fullstack, OSP, native/lib mode, etc.) so AI models can pick the right one without fetching its contents first.
+- **Full CLI access over MCP**: AI models can now discover and run any `jac` CLI command (including plugin-provided ones) directly from the MCP session. `list_commands` returns full argument metadata; `execute_command` runs them. Replaces the narrower `start_server`, `create_project`, and `list_templates` tools.
 
 ## jac-mcp 0.1.6 (Latest Release)
 
