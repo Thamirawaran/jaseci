@@ -55,6 +55,9 @@ def graph_visualize(
 """List all available jac CLI commands including those from installed plugins."""
 def list_commands -> dict[str, Any];
 
+"""Get full argument details for a specific jac CLI command."""
+def get_command(name: str) -> dict[str, Any];
+
 """Execute a jac CLI command by name with optional arguments."""
 def execute_command(
     command: str, args: list[str] | None = None, timeout: int = 30

@@ -254,8 +254,22 @@ impl ToolProvider.list_tools -> list[dict[str, Any]] {
         },
         {
             "name": "list_commands",
-            "description": "List all available jac CLI commands including commands registered by installed plugins. Returns command names, help text, argument definitions (name, type, required, default), group, and source plugin. Use this before execute_command to discover what commands are available and what arguments they accept.",
+            "description": "List all available jac CLI commands including plugin-provided ones. Returns name, help, group, source, and extended_by for each command. Call get_command(name) to get full argument details before executing.",
             "inputSchema": {"type": "object", "properties": {}}
+        },
+        {
+            "name": "get_command",
+            "description": "Get full details for a specific jac CLI command including all arguments (name, type, kind, required, default, help). Use this after list_commands to get the argument spec before calling execute_command.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "The command name (e.g. 'run', 'check', 'add')"
+                    }
+                },
+                "required": ["name"]
+            }
         },
         {
             "name": "execute_command",
@@ -384,6 +398,12 @@ impl ToolProvider.call_tool(name: str, arguments: dict[str, Any]) -> dict[str, A
             return graph_visualize(code, fmt, depth, bfs, edge_limit, node_limit);
         } elif name == "list_commands" {
             return list_commands();
+        } elif name == "get_command" {
+            cmd_name = arguments.get("name", "");
+            if not cmd_name {
+                return {"error": "Missing required argument: name"};
+            }
+            return get_command(cmd_name);
         } elif name == "execute_command" {
             cmd_name = arguments.get("command", "");
             cmd_args = arguments.get("args", []);
@@ -644,42 +664,24 @@ impl list_commands -> dict[str, Any] {
 
         commands: list[dict[str, Any]] = [];
         for spec in registry.get_all() {
-            args: list[dict[str, Any]] = [];
-            for arg in spec.get_all_args() {
-                type_name: str;
-                if hasattr(arg.typ, "__name__") {
-                    type_name = arg.typ.__name__;
-                } else {
-                    type_name = str(arg.typ);
+            # Collect unique plugin sources that extend this command
+            extensions: list[str] = [];
+            seen_ext: set = set();
+            for arg in spec.extra_args {
+                if arg.source != spec.source and arg.source not in seen_ext {
+                    seen_ext.add(arg.source);
+                    extensions.append(arg.source);
                 }
-                arg_info: dict[str, Any] = {
-                    "name": arg.name,
-                    "kind": arg.kind.name,
-                    "type": type_name,
-                    "required": arg.required,
-                    "default": arg.default,
-                    "help": arg.help,
-                    "source": arg.source
-                };
-                if arg.short is not None {
-                    arg_info["short"] = arg.short;
-                }
-                if arg.choices is not None {
-                    arg_info["choices"] = arg.choices;
-                }
-                args.append(arg_info);
             }
+
             cmd: dict[str, Any] = {
                 "name": spec.name,
                 "help": spec.help,
                 "group": spec.group,
-                "source": spec.source,
-                "args": args
+                "source": spec.source
             };
-            if spec.examples {
-                cmd["examples"] = [
-                    {"command": ex[0], "description": ex[1]} for ex in spec.examples
-                ];
+            if extensions {
+                cmd["extended_by"] = extensions;
             }
             commands.append(cmd);
         }
@@ -693,6 +695,79 @@ impl list_commands -> dict[str, Any] {
         };
     } except Exception as e {
         return {"error": f"Failed to list commands: {str(e)}"};
+    }
+}
+
+"""Get full argument details for a specific jac CLI command."""
+impl get_command(name: str) -> dict[str, Any] {
+    try {
+        import from jaclang.jac0core.runtime { JacRuntime as Jac }
+        import from jaclang.cli.registry { get_registry }
+
+        Jac.create_cmd();
+        registry = get_registry();
+        if not registry._finalized {
+            registry.finalize();
+        }
+
+        spec = registry.get(name);
+        if spec is None {
+            return {"error": f"Command not found: {name}"};
+        }
+
+        args: list[dict[str, Any]] = [];
+        seen_args: set = set();
+        for arg in spec.get_all_args() {
+            if arg.name in seen_args {
+                continue;
+            }
+            seen_args.add(arg.name);
+            type_name: str;
+            if hasattr(arg.typ, "__name__") {
+                type_name = arg.typ.__name__;
+            } else {
+                type_name = str(arg.typ);
+            }
+            arg_info: dict[str, Any] = {
+                "name": arg.name,
+                "kind": arg.kind.name,
+                "type": type_name,
+                "required": arg.required,
+                "default": arg.default,
+                "help": arg.help,
+                "source": arg.source
+            };
+            if arg.short is not None {
+                arg_info["short"] = arg.short;
+            }
+            if arg.choices is not None {
+                arg_info["choices"] = arg.choices;
+            }
+            args.append(arg_info);
+        }
+
+        extensions: list[str] = [];
+        seen_ext: set = set();
+        for arg in spec.extra_args {
+            if arg.source != spec.source and arg.source not in seen_ext {
+                seen_ext.add(arg.source);
+                extensions.append(arg.source);
+            }
+        }
+
+        result: dict[str, Any] = {
+            "name": spec.name,
+            "help": spec.help,
+            "group": spec.group,
+            "source": spec.source,
+            "args": args
+        };
+        if extensions {
+            result["extended_by"] = extensions;
+        }
+        return result;
+    } except Exception as e {
+        return {"error": f"Failed to get command: {str(e)}"};
     }
 }
 
