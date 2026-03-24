@@ -64,3 +64,11 @@ def create_project(
 def start_server(
     filename: str, port: int = 8000, faux: bool = False
 ) -> dict[str, Any];
+
+"""List all available jac CLI commands including those from installed plugins."""
+def list_commands -> dict[str, Any];
+
+"""Execute a jac CLI command by name with optional arguments."""
+def execute_command(
+    command: str, args: list[str] | None = None, timeout: int = 30
+) -> dict[str, Any];

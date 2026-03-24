@@ -305,6 +305,36 @@ impl ToolProvider.list_tools -> list[dict[str, Any]] {
                 "required": ["filename"]
             }
         },
+        {
+            "name": "list_commands",
+            "description": "List all available jac CLI commands including commands registered by installed plugins. Returns command names, help text, argument definitions (name, type, required, default), group, and source plugin. Use this before execute_command to discover what commands are available and what arguments they accept.",
+            "inputSchema": {"type": "object", "properties": {}}
+        },
+        {
+            "name": "execute_command",
+            "description": "Execute a jac CLI command by name with optional arguments. Use list_commands first to discover available commands and their accepted arguments. Arguments are passed as a list of strings exactly as you would type them on the command line (e.g. ['hello.jac', '--no-cache']).",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "The jac command to run (e.g. 'run', 'check', 'format', 'test')"
+                    },
+                    "args": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Arguments to pass to the command, as a list of strings (e.g. ['hello.jac', '--no-cache'])",
+                        "default": []
+                    },
+                    "timeout": {
+                        "type": "integer",
+                        "description": "Max execution time in seconds",
+                        "default": 30
+                    }
+                },
+                "required": ["command"]
+            }
+        },
 
     ];
 }
@@ -423,6 +453,16 @@ impl ToolProvider.call_tool(name: str, arguments: dict[str, Any]) -> dict[str, A
                 return {"error": "Missing required argument: filename"};
             }
             return start_server(srv_filename, port, faux);
+        } elif name == "list_commands" {
+            return list_commands();
+        } elif name == "execute_command" {
+            cmd_name = arguments.get("command", "");
+            cmd_args = arguments.get("args", []);
+            cmd_timeout = arguments.get("timeout", 30);
+            if not cmd_name {
+                return {"error": "Missing required argument: command"};
+            }
+            return execute_command(cmd_name, cmd_args, cmd_timeout);
         } else {
             return {"error": f"Unknown tool: {name}"};
         }
@@ -679,4 +719,108 @@ impl start_server(
 ) -> dict[str, Any] {
     import from jac_mcp.compiler_bridge { CompilerBridge }
     return CompilerBridge.start_server(filename, port, faux);
+}
+
+"""List all available jac CLI commands including those from installed plugins."""
+impl list_commands -> dict[str, Any] {
+    try {
+        import from jaclang.jac0core.runtime { JacRuntime as Jac }
+        import from jaclang.cli.registry { get_registry }
+
+        # Trigger plugin command registrations — same hook the CLI calls at startup
+        Jac.create_cmd();
+
+        registry = get_registry();
+        if not registry._finalized {
+            registry.finalize();
+        }
+
+        commands: list[dict[str, Any]] = [];
+        for spec in registry.get_all() {
+            args: list[dict[str, Any]] = [];
+            for arg in spec.get_all_args() {
+                type_name: str;
+                if hasattr(arg.typ, "__name__") {
+                    type_name = arg.typ.__name__;
+                } else {
+                    type_name = str(arg.typ);
+                }
+                arg_info: dict[str, Any] = {
+                    "name": arg.name,
+                    "kind": arg.kind.name,
+                    "type": type_name,
+                    "required": arg.required,
+                    "default": arg.default,
+                    "help": arg.help,
+                    "source": arg.source
+                };
+                if arg.short is not None {
+                    arg_info["short"] = arg.short;
+                }
+                if arg.choices is not None {
+                    arg_info["choices"] = arg.choices;
+                }
+                args.append(arg_info);
+            }
+            cmd: dict[str, Any] = {
+                "name": spec.name,
+                "help": spec.help,
+                "group": spec.group,
+                "source": spec.source,
+                "args": args
+            };
+            if spec.examples {
+                cmd["examples"] = [
+                    {"command": ex[0], "description": ex[1]} for ex in spec.examples
+                ];
+            }
+            commands.append(cmd);
+        }
+
+        commands.sort(key=lambda c : (c["group"], c["name"]));
+
+        return {
+            "commands": commands,
+            "groups": registry.get_groups(),
+            "total": len(commands)
+        };
+    } except Exception as e {
+        return {"error": f"Failed to list commands: {str(e)}"};
+    }
+}
+
+"""Execute a jac CLI command by name with optional arguments."""
+impl execute_command(
+    command: str, args: list[str] | None = None, timeout: int = 30
+) -> dict[str, Any] {
+    import subprocess;
+    import sys;
+
+    cmd_args: list[str] = [sys.executable, "-m", "jaclang", command] + (args or []);
+    try {
+        result = subprocess.run(
+            cmd_args, capture_output=True, text=True, timeout=timeout
+        );
+        return {
+            "success": result.returncode == 0,
+            "exit_code": result.returncode,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "command": f"jac {command} {' '.join(args or [])}"
+        };
+    } except subprocess.TimeoutExpired {
+        return {
+            "success": False,
+            "exit_code": -1,
+            "error": f"Command timed out after {timeout}s",
+            "command": f"jac {command} {' '.join(args or [])}"
+        };
+    } except Exception as e {
+        return {
+            "success": False,
+            "exit_code": -1,
+            "error": f"Failed to execute command: {str(e)}",
+            "command": f"jac {command} {' '.join(args or [])}"
+        };
+    }
 }
