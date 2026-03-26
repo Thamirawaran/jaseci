@@ -653,6 +653,7 @@ impl list_commands -> dict[str, Any] {
     try {
         import from jaclang.jac0core.runtime { JacRuntime as Jac }
         import from jaclang.cli.registry { get_registry }
+        import jaclang.cli.commands;
 
         # Trigger plugin command registrations, same hook the CLI calls at startup
         Jac.create_cmd();
@@ -703,6 +704,7 @@ impl get_command(name: str) -> dict[str, Any] {
     try {
         import from jaclang.jac0core.runtime { JacRuntime as Jac }
         import from jaclang.cli.registry { get_registry }
+        import jaclang.cli.commands;
 
         Jac.create_cmd();
         registry = get_registry();
