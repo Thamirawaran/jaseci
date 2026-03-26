@@ -273,7 +273,7 @@ impl ToolProvider.list_tools -> list[dict[str, Any]] {
         },
         {
             "name": "execute_command",
-            "description": "Execute a jac CLI command by name with optional arguments. Use list_commands first to discover available commands and their accepted arguments. Arguments are passed as a list of strings exactly as you would type them on the command line (e.g. ['hello.jac', '--no-cache']).",
+            "description": "Execute a jac CLI command by name with optional arguments. Use list_commands to discover commands, get_command(name) to get its argument spec, then call this. Arguments are passed as a list of strings exactly as you would type them on the command line (e.g. ['hello.jac', '--no-cache']).",
             "inputSchema": {
                 "type": "object",
                 "properties": {
