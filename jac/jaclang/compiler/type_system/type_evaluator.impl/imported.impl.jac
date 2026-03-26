@@ -171,8 +171,23 @@ impl TypeEvaluator.get_type_of_module(node_: uni.ModulePath) -> types.TypeBase {
             return node_.path[-1].type;
         }
         path_list = node_.resolve_relative_path_list();
+        # Calculate offset for relative imports from Python packages:
+        # leading dots produce extra segments in resolve_relative_path_list()
+        # that don't have corresponding entries in node_.path.
+        # E.g., "from .base import X" has path=[base] but path_list=[__init__.py, base.jac]
+        # Only apply offset when importing from Python __init__.py (not jaclang internals)
+        # to avoid circular import issues during compiler bootstrap.
+        offset = 0;
+        if node_.path and len(path_list) > len(node_.path) and node_.level > 0 {
+            first_path = path_list[0] if path_list else "";
+            # Only for Python __init__ files, not Jac __init__.jac
+            is_python_init = first_path.endswith(("__init__.py", "__init__.pyi"));
+            if is_python_init {
+                offset = len(path_list) - len(node_.path);
+            }
+        }
         for (idx, npath) in enumerate(node_.path) {
-            mod_path = path_list[idx];
+            mod_path = path_list[idx + offset];
 
             if mod_path in self._module_type_cache {
                 npath.type = self._module_type_cache[mod_path];
@@ -307,6 +322,15 @@ impl TypeEvaluator._try_read_jir_cache(resolved_path: str) -> (uni.Module | None
         data = cache_path.read_bytes();
         reader = JirReader(_source_path=resolved_path);
         mod = reader.read_module(data);
+
+        # Re-attach impl modules after JIR load.
+        # JIR doesn't serialize impl_mod, so symbols defined in impl files
+        # (e.g., self.x = value in __init__) would be lost. Re-discover and
+        # re-attach impl files, then re-run DeclImplMatchPass to restore them.
+        if mod is not None and resolved_path.endswith('.jac') {
+            self._reattach_impl_modules(mod, resolved_path);
+        }
+
         return mod;
     } except Exception {
         # Log but don't crash — fall back to full compile
@@ -315,11 +339,41 @@ impl TypeEvaluator._try_read_jir_cache(resolved_path: str) -> (uni.Module | None
     }
 }
 
+"""Re-attach impl modules after JIR load to restore impl-defined symbols."""
+impl TypeEvaluator._reattach_impl_modules(mod: uni.Module, source_path: str) -> None {
+    import from jaclang.jac0core.bccache { discover_annex_files }
+    import from jaclang.jac0core.passes { DeclImplMatchPass }
+
+    # Skip annex files (they don't have their own annexes)
+    if source_path.endswith('.impl.jac')
+    or source_path.endswith('.test.jac')
+    or mod.annexable_by is not None {
+        return;
+    }
+
+    # Compile impl files fresh (impl symbol defn nodes aren't serialized in JIR)
+    for impl_path in discover_annex_files(source_path, '.impl.jac') {
+        impl_mod = self.program.compile(
+            impl_path, no_cgen=True, type_check=False, symtab_ir_only=True
+        );
+        if impl_mod is not None and impl_mod not in mod.impl_mod {
+            mod.impl_mod.append(impl_mod);
+            impl_mod.parent_scope = mod;
+        }
+    }
+
+    # Re-run DeclImplMatchPass to restore instance variable symbols (e.g., self.x in __init__)
+    if mod.impl_mod {
+        DeclImplMatchPass(ir_in=mod, prog=self.program);
+    }
+}
+
 """Return the effective type of the symbol."""
 impl TypeEvaluator.get_type_of_symbol(symbol: uni.Symbol) -> TypeBase {
     if self.push_symbol_resolution(symbol) {
         try {
-            return self._get_type_of_symbol(symbol);
+            result = self._get_type_of_symbol(symbol);
+            return result;
         } finally {
             self.pop_symbol_resolution(symbol);
         }
