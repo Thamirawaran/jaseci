@@ -8,7 +8,7 @@ impl ToolProvider.list_tools -> list[dict[str, Any]] {
     return [
         {
             "name": "validate_jac",
-            "description": "Validate Jac code with full type checking. IMPORTANT: You MUST call this tool after generating or modifying any Jac code to verify it compiles correctly. Returns structured errors and warnings. If errors are returned, fix the code and re-validate before presenting it to the user.",
+            "description": "Validate Jac code with full type checking. Returns structured errors and warnings.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -27,7 +27,7 @@ impl ToolProvider.list_tools -> list[dict[str, Any]] {
         },
         {
             "name": "check_syntax",
-            "description": "Quick syntax-only check (parse-only, no type checking). Use this for a fast first pass when iterating on code. For final validation, use validate_jac instead.",
+            "description": "Parse-only syntax check (no type checking). Faster than validate_jac.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -41,7 +41,7 @@ impl ToolProvider.list_tools -> list[dict[str, Any]] {
         },
         {
             "name": "format_jac",
-            "description": "Format Jac code according to standard style. Use this to ensure code follows Jac formatting conventions before presenting it to the user.",
+            "description": "Format Jac code to standard style.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -55,7 +55,7 @@ impl ToolProvider.list_tools -> list[dict[str, Any]] {
         },
         {
             "name": "py_to_jac",
-            "description": "Convert Python code to Jac using the official compiler transpiler. Use this as a starting point when migrating Python code - the output may need manual refinement for idiomatic Jac style.",
+            "description": "Transpile Python code to Jac. Output may need manual refinement.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -69,7 +69,7 @@ impl ToolProvider.list_tools -> list[dict[str, Any]] {
         },
         {
             "name": "explain_error",
-            "description": "Explain a Jac compiler error with suggestions and examples. Use this when validate_jac returns errors you need to understand. Returns a structured explanation with the error category, root cause, and corrected code pattern.",
+            "description": "Explain a Jac compiler error with category, root cause, and fix example.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -83,7 +83,7 @@ impl ToolProvider.list_tools -> list[dict[str, Any]] {
         },
         {
             "name": "list_examples",
-            "description": "List available Jac example code categories. Use this to discover working Jac code examples that demonstrate correct patterns before writing new code.",
+            "description": "List available Jac example categories with descriptions.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -96,7 +96,7 @@ impl ToolProvider.list_tools -> list[dict[str, Any]] {
         },
         {
             "name": "get_example",
-            "description": "Get all .jac files from an example category. Use this to study working code before writing similar functionality - these examples are tested and verified.",
+            "description": "Get all .jac files from an example category.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -107,7 +107,7 @@ impl ToolProvider.list_tools -> list[dict[str, Any]] {
         },
         {
             "name": "search_docs",
-            "description": "Search Jac documentation by keyword. Use this when you are unsure about Jac syntax or features - the results come from the official documentation and are authoritative. Returns ranked snippets with resource URIs.",
+            "description": "Search Jac docs by keyword. Returns ranked snippets with resource URIs.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -123,7 +123,7 @@ impl ToolProvider.list_tools -> list[dict[str, Any]] {
         },
         {
             "name": "get_ast",
-            "description": "Parse Jac code and return AST representation. Useful for understanding code structure.",
+            "description": "Parse Jac code and return AST as tree or JSON.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -143,7 +143,7 @@ impl ToolProvider.list_tools -> list[dict[str, Any]] {
         },
         {
             "name": "lint_jac",
-            "description": "Lint Jac code to detect style violations, unused symbols, undefined names, unreachable code, and other issues. Supports 30+ lint rules (W3001-W3036). Use auto_fix=true to automatically fix violations and return corrected code.",
+            "description": "Lint Jac code for style violations and unused symbols. Supports auto_fix.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -162,7 +162,7 @@ impl ToolProvider.list_tools -> list[dict[str, Any]] {
         },
         {
             "name": "jac_to_py",
-            "description": "Convert Jac code to Python using the official compiler transpiler. Useful for understanding what Python code Jac compiles to, or for debugging. The output shows the generated Python equivalent of the Jac source.",
+            "description": "Transpile Jac code to Python. Shows generated Python output.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -176,7 +176,7 @@ impl ToolProvider.list_tools -> list[dict[str, Any]] {
         },
         {
             "name": "jac_to_js",
-            "description": "Convert Jac code to JavaScript/ECMAScript using the official compiler transpiler. Critical for jac-client full-stack development to understand what JS is generated from .cl.jac client code.",
+            "description": "Transpile Jac code to JavaScript. Shows generated JS from .cl.jac code.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -190,7 +190,7 @@ impl ToolProvider.list_tools -> list[dict[str, Any]] {
         },
         {
             "name": "run_jac",
-            "description": "Execute Jac code and return stdout/stderr output. Use this to verify runtime behavior after validation. Supports running the whole module or a specific entrypoint (walker or function). Code runs in a sandboxed environment with a timeout.",
+            "description": "Execute Jac code and return stdout/stderr. Supports optional entrypoint.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -214,7 +214,7 @@ impl ToolProvider.list_tools -> list[dict[str, Any]] {
         },
         {
             "name": "graph_visualize",
-            "description": "Execute Jac code and generate a graph visualization of the resulting object-spatial graph. Returns DOT or JSON format. Essential for debugging walker traversal, node connectivity, and data flow in Jac's graph-based programming model.",
+            "description": "Run Jac code and visualize the resulting graph as DOT or JSON.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -254,12 +254,12 @@ impl ToolProvider.list_tools -> list[dict[str, Any]] {
         },
         {
             "name": "list_commands",
-            "description": "List all available jac CLI commands including plugin-provided ones. Returns name, help, group, source, and extended_by for each command. Call get_command(name) to get full argument details before executing.",
+            "description": "List all jac CLI commands including plugin-provided ones.",
             "inputSchema": {"type": "object", "properties": {}}
         },
         {
             "name": "get_command",
-            "description": "Get full details for a specific jac CLI command including all arguments (name, type, kind, required, default, help). Use this after list_commands to get the argument spec before calling execute_command.",
+            "description": "Get full argument details for a specific jac CLI command.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -273,7 +273,7 @@ impl ToolProvider.list_tools -> list[dict[str, Any]] {
         },
         {
             "name": "execute_command",
-            "description": "Execute a jac CLI command by name with optional arguments. Use list_commands to discover commands, get_command(name) to get its argument spec, then call this. Arguments are passed as a list of strings exactly as you would type them on the command line (e.g. ['hello.jac', '--no-cache']).",
+            "description": "Execute a jac CLI command with arguments (e.g. ['hello.jac', '--no-cache']).",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -298,12 +298,12 @@ impl ToolProvider.list_tools -> list[dict[str, Any]] {
         },
         {
             "name": "understand_jac_and_jaseci",
-            "description": "Get the Jac & Jaseci knowledge map. Call this ONCE at the start of every Jac session. The response tells you what Jac and Jaseci are, the 3 core paradigms, and for each topic which URIs you MUST call get_resource with before writing code. After calling this tool, you MUST immediately call get_resource(uri='jac://guide/pitfalls') and get_resource(uri='jac://guide/patterns') before writing any Jac code.",
+            "description": "Get the Jac & Jaseci knowledge map with resource URIs for each topic.",
             "inputSchema": {"type": "object", "properties": {}}
         },
         {
             "name": "get_resource",
-            "description": "Fetch the full content of a Jac/Jaseci documentation resource by URI. MUST be called with the URIs listed in understand_jac_and_jaseci before writing code or using any feature. Only fetch URIs relevant to your current task - do not fetch all at once.",
+            "description": "Fetch a Jac/Jaseci doc resource by URI (e.g. jac://guide/pitfalls, jac://docs/osp).",
             "inputSchema": {
                 "type": "object",
                 "properties": {
