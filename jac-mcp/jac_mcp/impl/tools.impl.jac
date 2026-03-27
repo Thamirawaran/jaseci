@@ -55,7 +55,7 @@ impl ToolProvider.list_tools -> list[dict[str, Any]] {
         },
         {
             "name": "py_to_jac",
-            "description": "Convert Python code to Jac using the official compiler transpiler. Use this as a starting point when migrating Python code — the output may need manual refinement for idiomatic Jac style.",
+            "description": "Convert Python code to Jac using the official compiler transpiler. Use this as a starting point when migrating Python code - the output may need manual refinement for idiomatic Jac style.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -96,7 +96,7 @@ impl ToolProvider.list_tools -> list[dict[str, Any]] {
         },
         {
             "name": "get_example",
-            "description": "Get all .jac files from an example category. Use this to study working code before writing similar functionality — these examples are tested and verified.",
+            "description": "Get all .jac files from an example category. Use this to study working code before writing similar functionality - these examples are tested and verified.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -107,7 +107,7 @@ impl ToolProvider.list_tools -> list[dict[str, Any]] {
         },
         {
             "name": "search_docs",
-            "description": "Search Jac documentation by keyword. Use this when you are unsure about Jac syntax or features — the results come from the official documentation and are authoritative. Returns ranked snippets with resource URIs.",
+            "description": "Search Jac documentation by keyword. Use this when you are unsure about Jac syntax or features - the results come from the official documentation and are authoritative. Returns ranked snippets with resource URIs.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -296,6 +296,25 @@ impl ToolProvider.list_tools -> list[dict[str, Any]] {
                 "required": ["command"]
             }
         },
+        {
+            "name": "understand_jac_and_jaseci",
+            "description": "Get the Jac & Jaseci knowledge map. Call this ONCE at the start of every Jac session. The response tells you what Jac and Jaseci are, the 3 core paradigms, and for each topic which URIs you MUST call get_resource with before writing code. After calling this tool, you MUST immediately call get_resource(uri='jac://guide/pitfalls') and get_resource(uri='jac://guide/patterns') before writing any Jac code.",
+            "inputSchema": {"type": "object", "properties": {}}
+        },
+        {
+            "name": "get_resource",
+            "description": "Fetch the full content of a Jac/Jaseci documentation resource by URI. MUST be called with the URIs listed in understand_jac_and_jaseci before writing code or using any feature. Only fetch URIs relevant to your current task - do not fetch all at once.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "uri": {
+                        "type": "string",
+                        "description": "Resource URI to fetch, e.g. jac://guide/pitfalls or jac://docs/osp"
+                    }
+                },
+                "required": ["uri"]
+            }
+        },
 
     ];
 }
@@ -412,6 +431,14 @@ impl ToolProvider.call_tool(name: str, arguments: dict[str, Any]) -> dict[str, A
                 return {"error": "Missing required argument: command"};
             }
             return execute_command(cmd_name, cmd_args, cmd_timeout);
+        } elif name == "understand_jac_and_jaseci" {
+            return understand_jac_and_jaseci();
+        } elif name == "get_resource" {
+            uri = arguments.get("uri", "");
+            if not uri {
+                return {"error": "Missing required argument: uri"};
+            }
+            return get_resource(uri);
         } else {
             return {"error": f"Unknown tool: {name}"};
         }
@@ -807,4 +834,28 @@ impl execute_command(
             "command": f"jac {command} {' '.join(args or [])}"
         };
     }
+}
+
+"""Get the Jac & Jaseci knowledge map with resource URIs for any task."""
+impl understand_jac_and_jaseci -> dict[str, Any] {
+    import from jac_mcp.resources { ResourceProvider }
+    rp = ResourceProvider();
+    rp.index_resources();
+    content = rp.read_resource("jac://guide/understand");
+    if content.startswith("Error:") {
+        return {"error": content};
+    }
+    return {"knowledge_map": content};
+}
+
+"""Fetch a Jac/Jaseci doc resource by URI."""
+impl get_resource(uri: str) -> dict[str, Any] {
+    import from jac_mcp.resources { ResourceProvider }
+    rp = ResourceProvider();
+    rp.index_resources();
+    content = rp.read_resource(uri);
+    if content.startswith("Error:") {
+        return {"error": content, "uri": uri};
+    }
+    return {"uri": uri, "content": content};
 }
