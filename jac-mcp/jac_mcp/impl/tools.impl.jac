@@ -96,11 +96,26 @@ impl ToolProvider.list_tools -> list[dict[str, Any]] {
         },
         {
             "name": "get_example",
-            "description": "Get all .jac files from an example category.",
+            "description": "Get all .jac files from an example category. Call list_examples first to see valid names.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "name": {"type": "string", "description": "Example category name"}
+                    "name": {
+                        "type": "string",
+                        "description": "Example category name. Valid: chess, data_spatial, guess_game, littleX, manual_code, medical, micro, plugins, rpg_game, shopping_cart",
+                        "enum": [
+                            "chess",
+                            "data_spatial",
+                            "guess_game",
+                            "littleX",
+                            "manual_code",
+                            "medical",
+                            "micro",
+                            "plugins",
+                            "rpg_game",
+                            "shopping_cart"
+                        ]
+                    }
                 },
                 "required": ["name"]
             }

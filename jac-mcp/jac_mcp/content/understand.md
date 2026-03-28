@@ -4,6 +4,7 @@
 
 Jac is a full-stack language that compiles to Python bytecode (server), JavaScript (client), and native
 binaries - from a single file. It extends Python with 3 paradigms:
+
   1. Codespaces (sv/cl/na) - target where code runs: server, browser, or native binary
   2. Object-Spatial Programming (OSP) - graph-native data model with built-in multi-user persistence
   3. Meaning-Typed Programming (MTP) - AI functions via `by llm` with compiler-extracted semantics
@@ -100,6 +101,9 @@ declaration/implementation separation (.jac + .impl.jac split).
   jac://guide/patterns         [M] idiomatic patterns with working code
   jac://examples/littleX       [S] full-stack social app (real-world OSP)
   jac://examples/guess_game    [S] progressive: plain obj -> walker -> LLM
+
+Available example categories (use ONLY these names with get_example):
+  chess, data_spatial, guess_game, littleX, manual_code, medical, micro, plugins, rpg_game, shopping_cart
 
 ### [G] Code Organization & Project Structure
 
