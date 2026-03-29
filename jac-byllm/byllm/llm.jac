@@ -73,6 +73,13 @@ obj BaseLLM {
     def make_model_params(mt_run: MTRuntime) -> dict;
     def log_info(message: str) -> None;
     def format_prompt(params: dict) -> str;
+    # Shared helpers (used by both sync and async paths)
+    def _prepare_call_params(mt_run: MTRuntime) -> dict;
+    def _parse_response(response: dict, mt_run: MTRuntime) -> CompletionResult;
+    def _with_finish_tool(mt_run: MTRuntime) -> tuple;
+    def _aggregate_usage -> StreamEvent | None;
+    def _max_tool_result_len(mt_run: MTRuntime) -> int;
+    # Sync dispatch
     def dispatch_no_streaming(mt_run: MTRuntime) -> CompletionResult;
     def dispatch_streaming(mt_run: MTRuntime) -> Generator[str, None, None];
     def model_call_no_stream(params: dict) -> dict;
@@ -83,10 +90,8 @@ obj BaseLLM {
     def _yield_recovery_result(
         recovery_resp: CompletionResult, iter_count: int, mt_run: MTRuntime
     ) -> Generator[StreamEvent, None, None];
-
     def _invoke_streaming(mt_run: MTRuntime) -> Generator[StreamEvent, None, None];
-
-    # Async counterparts — mirror sync methods using litellm.acompletion / AsyncOpenAI.
+    # Async dispatch — mirrors sync using litellm.acompletion / AsyncOpenAI
     async def ainvoke(mt_run: MTRuntime) -> object;
     async def adispatch_no_streaming(mt_run: MTRuntime) -> CompletionResult;
     async def adispatch_streaming(mt_run: MTRuntime) -> AsyncGenerator[str, None];

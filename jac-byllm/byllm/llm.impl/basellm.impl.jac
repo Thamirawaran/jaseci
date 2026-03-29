@@ -222,24 +222,24 @@ impl BaseLLM.format_prompt(params: dict) -> str {
     return log;
 }
 
-"""Dispatch the LLM call without streaming.
+"""Prepare LLM call params and return the stripped params dict.
 
-Makes a synchronous API call and processes the response, including
-parsing any tool calls returned by the model.
+Shared by both sync and async dispatch paths.
 """
-impl BaseLLM.dispatch_no_streaming(mt_run: MTRuntime) -> CompletionResult {
-    # Construct the parameters for the LLM call
+impl BaseLLM._prepare_call_params(mt_run: MTRuntime) -> dict {
     params = self.make_model_params(mt_run);
-    # Call the LiteLLM API
     log_params = self.format_prompt(params);
     self.log_info(f"Calling LLM: {self.model_name} with params: {log_params}");
     self.api_base = params.pop("api_base", DEFAULT_BASE_URL);
     params.pop("api_key", None);
-    response = self.model_call_no_stream(params);
-    # Output format:
-    # https://docs.litellm.ai/docs/#response-format-openai-format
-    #
-    # TODO: Handle stream output (type ignoring stream response)
+    return params;
+}
+
+"""Parse a raw LLM response into a CompletionResult.
+
+Shared by both sync and async dispatch paths — pure logic, no I/O.
+"""
+impl BaseLLM._parse_response(response: dict, mt_run: MTRuntime) -> CompletionResult {
     message: LiteLLMMessage = response.get("choices", [])[0].get(
         "message"
     );  # type: ignore
@@ -259,9 +259,6 @@ impl BaseLLM.dispatch_no_streaming(mt_run: MTRuntime) -> CompletionResult {
             );
         }
     }
-    # Only parse the content as the final output when there are no tool calls.
-    # gpt-4o may return non-JSON content alongside tool calls (e.g. "I'll handle that."),
-    # which would cause json.loads to fail if we parsed it as the typed response.
     output_value = mt_run.parse_response(output_content)
         if not tool_calls_list
         else output_content;
@@ -271,18 +268,23 @@ impl BaseLLM.dispatch_no_streaming(mt_run: MTRuntime) -> CompletionResult {
     );
 }
 
-"""Dispatch the LLM call with streaming.
+"""Dispatch the LLM call without streaming (sync)."""
+impl BaseLLM.dispatch_no_streaming(mt_run: MTRuntime) -> CompletionResult {
+    params = self._prepare_call_params(mt_run);
+    response = self.model_call_no_stream(params);
+    return self._parse_response(response, mt_run);
+}
 
-Makes a streaming API call and yields content chunks as they arrive.
-"""
+"""Dispatch the LLM call without streaming (async)."""
+impl BaseLLM.adispatch_no_streaming(mt_run: MTRuntime) -> CompletionResult {
+    params = self._prepare_call_params(mt_run);
+    response = await self.amodel_call_no_stream(params);
+    return self._parse_response(response, mt_run);
+}
+
+"""Dispatch the LLM call with streaming (sync)."""
 impl BaseLLM.dispatch_streaming(mt_run: MTRuntime) -> Generator[str, None, None] {
-    # Construct the parameters for the LLM call
-    params = self.make_model_params(mt_run);
-    # Call the LiteLLM API
-    log_params = self.format_prompt(params);
-    self.log_info(f"Calling LLM: {self.model_name} with params:\n{log_params}");
-    self.api_base = params.pop("api_base", DEFAULT_BASE_URL);
-    params.pop("api_key", None);
+    params = self._prepare_call_params(mt_run);
     response = self.model_call_with_stream(params);
     for chunk in response {
         if chunk?.choices and chunk?.choices?[0]?.delta {
@@ -292,101 +294,9 @@ impl BaseLLM.dispatch_streaming(mt_run: MTRuntime) -> Generator[str, None, None]
     }
 }
 
-"""Make a direct model call without streaming.
-
-Subclasses must implement this to define how the actual LLM API is called.
-Should return the raw API response object.
-"""
-impl BaseLLM.model_call_no_stream(params: dict) -> dict {
-    raise NotImplementedError(
-        "Subclasses must implement this method for LLM call without streaming."
-    );
-}
-
-"""Make a direct model call with streaming.
-
-Subclasses must implement this to define how the actual LLM API is called.
-Should return a generator that yields response chunks.
-"""
-impl BaseLLM.model_call_with_stream(params: dict) -> Generator[str, None, None] {
-    raise NotImplementedError(
-        "Subclasses must implement this method for LLM call with streaming."
-    );
-}
-
-# ---------------------------------------------------------------------------
-# Async model call abstracts — subclasses override with real async I/O.
-# ---------------------------------------------------------------------------
-
-"""Async model call without streaming. Subclasses must override."""
-impl BaseLLM.amodel_call_no_stream(params: dict) -> dict {
-    raise NotImplementedError(
-        "Subclasses must implement this method for async LLM call without streaming."
-    );
-}
-
-"""Async model call with streaming. Subclasses must override."""
-impl BaseLLM.amodel_call_with_stream(params: dict) -> AsyncGenerator[str, None] {
-    raise NotImplementedError(
-        "Subclasses must implement this method for async LLM call with streaming."
-    );
-}
-
-# ---------------------------------------------------------------------------
-# Async dispatch — mirrors dispatch_no_streaming / dispatch_streaming.
-# ---------------------------------------------------------------------------
-
-"""Dispatch the LLM call without streaming, asynchronously.
-
-Mirrors dispatch_no_streaming: builds params, calls the async model,
-parses tool calls and response.
-"""
-impl BaseLLM.adispatch_no_streaming(mt_run: MTRuntime) -> CompletionResult {
-    params = self.make_model_params(mt_run);
-    log_params = self.format_prompt(params);
-    self.log_info(f"Calling LLM (async): {self.model_name} with params: {log_params}");
-    self.api_base = params.pop("api_base", DEFAULT_BASE_URL);
-    params.pop("api_key", None);
-    response = await self.amodel_call_no_stream(params);
-    message: LiteLLMMessage = response.get("choices", [])[0].get(
-        "message"
-    );  # type: ignore
-    mt_run.add_message(message);
-    output_content: str = message.get("content") or "";  # type: ignore
-    self.log_info(f"LLM call completed with response: {output_content}");
-    tool_calls: list[ToolCall] = [];
-    tool_calls_list = (message or {}).get("tool_calls") or [];
-    for tool_call in tool_calls_list {
-        if tool := mt_run.get_tool(tool_call.function.name) {
-            args_json = json.loads(tool_call.function.arguments);
-            args = tool.parse_arguments(args_json);
-            tool_calls.append(ToolCall(call_id=tool_call.id, tool=tool, args=args));
-        } else {
-            raise UnknownToolError(
-                f"Attempted to call tool: '{tool_call.function.name}' which was not present."
-            );
-        }
-    }
-    output_value = mt_run.parse_response(output_content)
-        if not tool_calls_list
-        else output_content;
-    usage_data = response.get("usage", {});
-    return CompletionResult(
-        output=output_value, tool_calls=tool_calls, usage=usage_data
-    );
-}
-
-"""Dispatch the LLM call with async streaming.
-
-Mirrors dispatch_streaming: builds params, calls the async streaming model,
-yields content chunks as they arrive.
-"""
+"""Dispatch the LLM call with async streaming."""
 impl BaseLLM.adispatch_streaming(mt_run: MTRuntime) -> AsyncGenerator[str, None] {
-    params = self.make_model_params(mt_run);
-    log_params = self.format_prompt(params);
-    self.log_info(f"Calling LLM (async): {self.model_name} with params:\n{log_params}");
-    self.api_base = params.pop("api_base", DEFAULT_BASE_URL);
-    params.pop("api_key", None);
+    params = self._prepare_call_params(mt_run);
     response = await self.amodel_call_with_stream(params);
     async for chunk in response {
         if chunk?.choices and chunk?.choices?[0]?.delta {
@@ -396,225 +306,40 @@ impl BaseLLM.adispatch_streaming(mt_run: MTRuntime) -> AsyncGenerator[str, None]
     }
 }
 
-# ---------------------------------------------------------------------------
-# Async helpers — mirror _force_final_answer, _stream_final_answer,
-# _attempt_recovery, _yield_recovery_result.
-# ---------------------------------------------------------------------------
-
-"""Force LLM to produce a final answer asynchronously (non-streaming)."""
-impl BaseLLM._aforce_final_answer(mt_run: MTRuntime) -> object {
-    final_instruction = Message(
-        role=MessageRole.USER,
-        content="Based on the tool calls and their results above, provide only your final answer.",
+"""Subclasses must implement — sync model call without streaming."""
+impl BaseLLM.model_call_no_stream(params: dict) -> dict {
+    raise NotImplementedError(
+        "Subclasses must implement this method for LLM call without streaming."
     );
-    mt_run.add_message(final_instruction);
+}
+
+"""Subclasses must implement — sync model call with streaming."""
+impl BaseLLM.model_call_with_stream(params: dict) -> Generator[str, None, None] {
+    raise NotImplementedError(
+        "Subclasses must implement this method for LLM call with streaming."
+    );
+}
+
+"""Subclasses must implement — async model call without streaming."""
+impl BaseLLM.amodel_call_no_stream(params: dict) -> dict {
+    raise NotImplementedError(
+        "Subclasses must implement this method for async LLM call without streaming."
+    );
+}
+
+"""Subclasses must implement — async model call with streaming."""
+impl BaseLLM.amodel_call_with_stream(params: dict) -> AsyncGenerator[str, None] {
+    raise NotImplementedError(
+        "Subclasses must implement this method for async LLM call with streaming."
+    );
+}
+
+"""Restrict tools to finish_tool only, call body, restore. Shared setup/teardown."""
+impl BaseLLM._with_finish_tool(mt_run: MTRuntime) -> tuple {
     original_tools = mt_run.tools;
     finish_tool_obj = mt_run.get_tool("finish_tool");
     mt_run.tools = [finish_tool_obj] if finish_tool_obj else [];
-    try {
-        final_resp = await self.adispatch_no_streaming(mt_run);
-        if final_resp.tool_calls {
-            for tool_call in final_resp.tool_calls {
-                if tool_call.is_finish_call() {
-                    mt_run.add_message(await tool_call.acall());
-                    return tool_call.get_output();
-                }
-            }
-        }
-        return str(final_resp.output) if final_resp.output else "";
-    } finally {
-        mt_run.tools = original_tools;
-    }
-}
-
-"""Stream the final answer asynchronously after ReAct tool calls complete."""
-impl BaseLLM._astream_final_answer(mt_run: MTRuntime) -> AsyncGenerator[str, None] {
-    final_instruction = Message(
-        role=MessageRole.USER,
-        content="Based on the tool calls and their results above, provide your final answer. "
-        "Be comprehensive and synthesize all the information gathered.",
-    );
-    mt_run.add_message(final_instruction);
-    original_tools = mt_run.tools;
-    finish_tool_obj = mt_run.get_tool("finish_tool");
-    mt_run.tools = [finish_tool_obj] if finish_tool_obj else [];
-    original_tool_choice = mt_run.call_params.pop("tool_choice", None);
-    mt_run.call_params["tool_choice"] = "none";
-    try {
-        async for token in self.adispatch_streaming(mt_run) {
-            yield token;
-        }
-    } finally {
-        mt_run.tools = original_tools;
-        mt_run.call_params.pop("tool_choice", None);
-        if original_tool_choice is not None {
-            mt_run.call_params["tool_choice"] = original_tool_choice;
-        }
-    }
-}
-
-"""Attempt async finish_tool recovery when the LLM skips the expected workflow."""
-impl BaseLLM._aattempt_recovery(mt_run: MTRuntime) -> CompletionResult | None {
-    finish_tool_obj = mt_run.get_tool("finish_tool");
-    if not finish_tool_obj or mt_run.resp_type is None or mt_run.resp_type is str {
-        return None;
-    }
-    recovery_msg = Message(
-        role=MessageRole.USER,
-        content="You must use finish_tool to return your response. Call finish_tool now.",
-    );
-    mt_run.add_message(recovery_msg);
-    original_tools = mt_run.tools;
-    mt_run.tools = [finish_tool_obj];
-    try {
-        return await self.adispatch_no_streaming(mt_run);
-    } finally {
-        mt_run.tools = original_tools;
-    }
-}
-
-"""Process a recovery CompletionResult for async streaming, yielding StreamEvents."""
-impl BaseLLM._ayield_recovery_result(
-    recovery_resp: CompletionResult, iter_count: int, mt_run: MTRuntime
-) -> AsyncGenerator[StreamEvent, None] {
-    self._usage_history.append(recovery_resp.usage);
-    finish_found = False;
-    if recovery_resp.tool_calls {
-        for tool_call in recovery_resp.tool_calls {
-            if tool_call.is_finish_call() {
-                mt_run.add_message(await tool_call.acall());
-                finish_found = True;
-                break;
-            }
-        }
-    }
-    yield StreamEvent(event_type="steps_done", data={"iterations": iter_count});
-    if finish_found {
-        async for token in self._astream_final_answer(mt_run) {
-            if token {
-                yield StreamEvent(event_type="chunk", data={"content": token});
-            }
-        }
-    } elif recovery_resp.output {
-        yield StreamEvent(
-            event_type="chunk", data={"content": str(recovery_resp.output)}
-        );
-    }
-}
-
-# ---------------------------------------------------------------------------
-# ainvoke — async ReAct loop, mirrors BaseLLM.invoke.
-# ---------------------------------------------------------------------------
-
-"""Invoke the LLM asynchronously with the given MTRuntime.
-
-Mirrors BaseLLM.invoke: handles streaming, non-streaming, and ReAct loops
-with await at all I/O points.
-"""
-impl BaseLLM.ainvoke(mt_run: MTRuntime) -> object {
-    # If logging is enabled with streaming, yield StreamEvent objects
-    if mt_run.stream and mt_run.call_params.get("logging", False) {
-        return self._ainvoke_streaming(mt_run);
-    }
-    # If streaming without tools, stream immediately
-    if mt_run.stream and len(mt_run.tools) == 0 {
-        return self.adispatch_streaming(mt_run);
-    }
-    max_iters = (
-        mt_run.call_params.get("max_react_iterations")
-        or self.call_params.get("max_react_iterations")
-        or _call_params_config.get("max_react_iterations")
-        or 0
-    );
-    on_iteration = (
-        mt_run.call_params.get("on_iteration") or self.call_params.get("on_iteration")
-    );
-    iter_count = 0;
-    last_tool = "";
-    last_result = "";
-    total_tokens = 0;
-    while True {
-        iter_count += 1;
-        if on_iteration and iter_count > 1 {
-            ctx = IterationContext(
-                iteration=iter_count,
-                messages=mt_run.messages,
-                last_tool=last_tool,
-                last_result=last_result,
-                total_tokens=total_tokens
-            );
-            action = on_iteration(ctx);
-            if action == IterationAction.ABORT {
-                return last_result;
-            }
-            if action == IterationAction.ABORT_WITH_SUMMARY {
-                if mt_run.stream {
-                    return self._astream_final_answer(mt_run);
-                }
-                return await self._aforce_final_answer(mt_run);
-            }
-        }
-        if int(max_iters) > 0 and iter_count > int(max_iters) {
-            if mt_run.stream {
-                return self._astream_final_answer(mt_run);
-            }
-            return await self._aforce_final_answer(mt_run);
-        }
-        try {
-            resp = await self.adispatch_no_streaming(mt_run);
-        } except OutputConversionError {
-            recovery_resp = await self._aattempt_recovery(mt_run);
-            if recovery_resp is None {
-                raise;
-            }
-            if recovery_resp.tool_calls {
-                for tool_call in recovery_resp.tool_calls {
-                    if tool_call.is_finish_call() {
-                        mt_run.add_message(await tool_call.acall());
-                        return tool_call.get_output();
-                    }
-                }
-            }
-            return recovery_resp.output;
-        }
-        usage = resp.usage or {};
-        total_tokens += int(
-            usage.get("total_tokens", 0)
-                if isinstance(usage, dict)
-                else getattr(usage, "total_tokens", 0)
-        );
-        if resp.tool_calls {
-            for tool_call in resp.tool_calls {
-                if tool_call.is_finish_call() {
-                    mt_run.add_message(await tool_call.acall());
-                    if mt_run.stream {
-                        return self._astream_final_answer(mt_run);
-                    }
-                    return tool_call.get_output();
-                } else {
-                    result_msg = await tool_call.acall();
-                    last_tool = tool_call.tool.get_name();
-                    last_result = str(result_msg.content)[:500];
-                    mt_run.add_message(result_msg);
-                }
-            }
-        } else {
-            recovery_resp = await self._aattempt_recovery(mt_run);
-            if recovery_resp is None {
-                break;
-            }
-            if recovery_resp.tool_calls {
-                for tool_call in recovery_resp.tool_calls {
-                    if tool_call.is_finish_call() {
-                        mt_run.add_message(await tool_call.acall());
-                        return tool_call.get_output();
-                    }
-                }
-            }
-            return recovery_resp.output;
-        }
-    }
-    return resp.output;
+    return (original_tools, finish_tool_obj);
 }
 
 """Force LLM to produce a final answer (non-streaming). Restricts tools to finish_tool only."""
@@ -743,6 +468,214 @@ impl BaseLLM._yield_recovery_result(
             event_type="chunk", data={"content": str(recovery_resp.output)}
         );
     }
+}
+
+# ---------------------------------------------------------------------------
+# Async helpers — thin wrappers using async dispatch + shared setup logic.
+# ---------------------------------------------------------------------------
+
+"""Async force final answer (non-streaming)."""
+impl BaseLLM._aforce_final_answer(mt_run: MTRuntime) -> object {
+    final_instruction = Message(
+        role=MessageRole.USER,
+        content="Based on the tool calls and their results above, provide only your final answer.",
+    );
+    mt_run.add_message(final_instruction);
+    (original_tools, _) = self._with_finish_tool(mt_run);
+    try {
+        final_resp = await self.adispatch_no_streaming(mt_run);
+        if final_resp.tool_calls {
+            for tool_call in final_resp.tool_calls {
+                if tool_call.is_finish_call() {
+                    mt_run.add_message(await tool_call.acall());
+                    return tool_call.get_output();
+                }
+            }
+        }
+        return str(final_resp.output) if final_resp.output else "";
+    } finally {
+        mt_run.tools = original_tools;
+    }
+}
+
+"""Async stream final answer."""
+impl BaseLLM._astream_final_answer(mt_run: MTRuntime) -> AsyncGenerator[str, None] {
+    final_instruction = Message(
+        role=MessageRole.USER,
+        content="Based on the tool calls and their results above, provide your final answer. "
+        "Be comprehensive and synthesize all the information gathered.",
+    );
+    mt_run.add_message(final_instruction);
+    (original_tools, _) = self._with_finish_tool(mt_run);
+    original_tool_choice = mt_run.call_params.pop("tool_choice", None);
+    mt_run.call_params["tool_choice"] = "none";
+    try {
+        async for token in self.adispatch_streaming(mt_run) {
+            yield token;
+        }
+    } finally {
+        mt_run.tools = original_tools;
+        mt_run.call_params.pop("tool_choice", None);
+        if original_tool_choice is not None {
+            mt_run.call_params["tool_choice"] = original_tool_choice;
+        }
+    }
+}
+
+"""Async attempt finish_tool recovery."""
+impl BaseLLM._aattempt_recovery(mt_run: MTRuntime) -> CompletionResult | None {
+    finish_tool_obj = mt_run.get_tool("finish_tool");
+    if not finish_tool_obj or mt_run.resp_type is None or mt_run.resp_type is str {
+        return None;
+    }
+    recovery_msg = Message(
+        role=MessageRole.USER,
+        content="You must use finish_tool to return your response. Call finish_tool now.",
+    );
+    mt_run.add_message(recovery_msg);
+    original_tools = mt_run.tools;
+    mt_run.tools = [finish_tool_obj];
+    try {
+        return await self.adispatch_no_streaming(mt_run);
+    } finally {
+        mt_run.tools = original_tools;
+    }
+}
+
+"""Async recovery result yielder for streaming."""
+impl BaseLLM._ayield_recovery_result(
+    recovery_resp: CompletionResult, iter_count: int, mt_run: MTRuntime
+) -> AsyncGenerator[StreamEvent, None] {
+    self._usage_history.append(recovery_resp.usage);
+    finish_found = False;
+    if recovery_resp.tool_calls {
+        for tool_call in recovery_resp.tool_calls {
+            if tool_call.is_finish_call() {
+                mt_run.add_message(await tool_call.acall());
+                finish_found = True;
+                break;
+            }
+        }
+    }
+    yield StreamEvent(event_type="steps_done", data={"iterations": iter_count});
+    if finish_found {
+        async for token in self._astream_final_answer(mt_run) {
+            if token {
+                yield StreamEvent(event_type="chunk", data={"content": token});
+            }
+        }
+    } elif recovery_resp.output {
+        yield StreamEvent(
+            event_type="chunk", data={"content": str(recovery_resp.output)}
+        );
+    }
+}
+
+# ---------------------------------------------------------------------------
+# ainvoke — async ReAct loop.
+# ---------------------------------------------------------------------------
+
+"""Invoke the LLM asynchronously. Mirrors invoke() with await at I/O points."""
+impl BaseLLM.ainvoke(mt_run: MTRuntime) -> object {
+    if mt_run.stream and mt_run.call_params.get("logging", False) {
+        return self._ainvoke_streaming(mt_run);
+    }
+    if mt_run.stream and len(mt_run.tools) == 0 {
+        return self.adispatch_streaming(mt_run);
+    }
+    max_iters = (
+        mt_run.call_params.get("max_react_iterations")
+        or self.call_params.get("max_react_iterations")
+        or _call_params_config.get("max_react_iterations")
+        or 0
+    );
+    on_iteration = (
+        mt_run.call_params.get("on_iteration") or self.call_params.get("on_iteration")
+    );
+    iter_count = 0;
+    last_tool = "";
+    last_result = "";
+    total_tokens = 0;
+    while True {
+        iter_count += 1;
+        if on_iteration and iter_count > 1 {
+            ctx = IterationContext(
+                iteration=iter_count, messages=mt_run.messages,
+                last_tool=last_tool, last_result=last_result,
+                total_tokens=total_tokens
+            );
+            action = on_iteration(ctx);
+            if action == IterationAction.ABORT {
+                return last_result;
+            }
+            if action == IterationAction.ABORT_WITH_SUMMARY {
+                if mt_run.stream {
+                    return self._astream_final_answer(mt_run);
+                }
+                return await self._aforce_final_answer(mt_run);
+            }
+        }
+        if int(max_iters) > 0 and iter_count > int(max_iters) {
+            if mt_run.stream {
+                return self._astream_final_answer(mt_run);
+            }
+            return await self._aforce_final_answer(mt_run);
+        }
+        try {
+            resp = await self.adispatch_no_streaming(mt_run);
+        } except OutputConversionError {
+            recovery_resp = await self._aattempt_recovery(mt_run);
+            if recovery_resp is None {
+                raise;
+            }
+            if recovery_resp.tool_calls {
+                for tc in recovery_resp.tool_calls {
+                    if tc.is_finish_call() {
+                        mt_run.add_message(await tc.acall());
+                        return tc.get_output();
+                    }
+                }
+            }
+            return recovery_resp.output;
+        }
+        usage = resp.usage or {};
+        total_tokens += int(
+            usage.get("total_tokens", 0)
+                if isinstance(usage, dict)
+                else getattr(usage, "total_tokens", 0)
+        );
+        if resp.tool_calls {
+            for tool_call in resp.tool_calls {
+                if tool_call.is_finish_call() {
+                    mt_run.add_message(await tool_call.acall());
+                    if mt_run.stream {
+                        return self._astream_final_answer(mt_run);
+                    }
+                    return tool_call.get_output();
+                } else {
+                    result_msg = await tool_call.acall();
+                    last_tool = tool_call.tool.get_name();
+                    last_result = str(result_msg.content)[:500];
+                    mt_run.add_message(result_msg);
+                }
+            }
+        } else {
+            recovery_resp = await self._aattempt_recovery(mt_run);
+            if recovery_resp is None {
+                break;
+            }
+            if recovery_resp.tool_calls {
+                for tc in recovery_resp.tool_calls {
+                    if tc.is_finish_call() {
+                        mt_run.add_message(await tc.acall());
+                        return tc.get_output();
+                    }
+                }
+            }
+            return recovery_resp.output;
+        }
+    }
+    return resp.output;
 }
 
 """Invoke the LLM with logging enabled, yielding StreamEvent objects.
@@ -895,15 +828,7 @@ impl BaseLLM._invoke_streaming(
                         # Execute the tool
                         result_msg = tool_call();
                         last_tool = tool_call.tool.get_name();
-                        # Truncate result for the event stream (full result stays in mt_run messages).
-                        # Configurable via call_params["max_tool_result_length"], default 500.
-                        max_result_len = int(
-                            mt_run.call_params.get("max_tool_result_length")
-                            or self.call_params.get("max_tool_result_length")
-                            or _call_params_config.get("max_tool_result_length")
-                            or 500
-                        );
-                        truncated_result = result_msg.content[:max_result_len];
+                        truncated_result = result_msg.content[:self._max_tool_result_len(mt_run)];
                         last_result = truncated_result;
                         yield StreamEvent(
                             event_type="tool_result",
@@ -945,44 +870,58 @@ impl BaseLLM._invoke_streaming(
             }
         }
     }
-    # Emit aggregated usage from all LLM calls in this invocation, then reset.
-    if self._usage_history {
-        totals: dict = {};
-        per_call_dicts: list = [];
-        for u in self._usage_history {
-            # Usage may be a Pydantic model (LiteLLM) or a plain dict.
-            u_dict = u
-                if isinstance(u, dict)
-                else (u.model_dump() if u?.model_dump else vars(u));
-            per_call_dicts.append(u_dict);
-            for (k, v) in u_dict.items() {
-                if isinstance(v, (int, float)) {
-                    totals[k] = totals.get(k, 0) + v;
-                }
-            }
-        }
-        yield StreamEvent(
-            event_type="usage", data={"total": totals, "per_call": per_call_dicts}
-        );
-        self._usage_history = [];
+    # Emit aggregated usage
+    usage_event = self._aggregate_usage();
+    if usage_event {
+        yield usage_event;
     }
 }
 
+"""Aggregate _usage_history into a StreamEvent and reset. Returns None if empty."""
+impl BaseLLM._aggregate_usage -> StreamEvent | None {
+    if not self._usage_history {
+        return None;
+    }
+    totals: dict = {};
+    per_call_dicts: list = [];
+    for u in self._usage_history {
+        u_dict = u
+            if isinstance(u, dict)
+            else (u.model_dump() if u?.model_dump else vars(u));
+        per_call_dicts.append(u_dict);
+        for (k, v) in u_dict.items() {
+            if isinstance(v, (int, float)) {
+                totals[k] = totals.get(k, 0) + v;
+            }
+        }
+    }
+    self._usage_history = [];
+    return StreamEvent(
+        event_type="usage", data={"total": totals, "per_call": per_call_dicts}
+    );
+}
+
+"""Resolve max_tool_result_length from call_params cascade."""
+impl BaseLLM._max_tool_result_len(mt_run: MTRuntime) -> int {
+    return int(
+        mt_run.call_params.get("max_tool_result_length")
+        or self.call_params.get("max_tool_result_length")
+        or _call_params_config.get("max_tool_result_length")
+        or 500
+    );
+}
+
 # ---------------------------------------------------------------------------
-# _ainvoke_streaming — async streaming with logging, mirrors _invoke_streaming.
+# _ainvoke_streaming — async streaming with logging.
+# Uses shared helpers: _aggregate_usage, _max_tool_result_len,
+# _ayield_recovery_result, _astream_final_answer.
 # ---------------------------------------------------------------------------
 
-"""Invoke the LLM asynchronously with logging, yielding StreamEvent objects.
-
-Mirrors _invoke_streaming: yields StreamEvent for every intermediate step
-(thoughts, tool calls, results) and final answer chunks, using async I/O.
-"""
+"""Async invoke with logging, yielding StreamEvent objects."""
 impl BaseLLM._ainvoke_streaming(
     mt_run: MTRuntime
 ) -> AsyncGenerator[StreamEvent, None] {
-    # Reset per-call usage accumulator.
     self._usage_history = [];
-    # No tools: wrap plain async streaming tokens in StreamEvent
     if len(mt_run.tools) == 0 {
         async for token in self.adispatch_streaming(mt_run) {
             if token {
@@ -990,7 +929,6 @@ impl BaseLLM._ainvoke_streaming(
             }
         }
     } else {
-        # ReAct loop with tools
         max_iters = (
             mt_run.call_params.get("max_react_iterations")
             or self.call_params.get("max_react_iterations")
@@ -1007,13 +945,10 @@ impl BaseLLM._ainvoke_streaming(
         total_tokens = 0;
         while True {
             iter_count += 1;
-
             if on_iteration and iter_count > 1 {
                 ctx = IterationContext(
-                    iteration=iter_count,
-                    messages=mt_run.messages,
-                    last_tool=last_tool,
-                    last_result=last_result,
+                    iteration=iter_count, messages=mt_run.messages,
+                    last_tool=last_tool, last_result=last_result,
                     total_tokens=total_tokens
                 );
                 action = on_iteration(ctx);
@@ -1023,31 +958,23 @@ impl BaseLLM._ainvoke_streaming(
                         data={"iterations": iter_count - 1, "reason": "aborted"}
                     );
                     if last_result {
-                        yield StreamEvent(
-                            event_type="chunk", data={"content": last_result}
-                        );
+                        yield StreamEvent(event_type="chunk", data={"content": last_result});
                     }
                     break;
                 }
                 if action == IterationAction.ABORT_WITH_SUMMARY {
                     yield StreamEvent(
                         event_type="steps_done",
-                        data={
-                            "iterations": iter_count - 1,
-                            "reason": "aborted_with_summary"
-                        }
+                        data={"iterations": iter_count - 1, "reason": "aborted_with_summary"}
                     );
                     async for token in self._astream_final_answer(mt_run) {
                         if token {
-                            yield StreamEvent(
-                                event_type="chunk", data={"content": token}
-                            );
+                            yield StreamEvent(event_type="chunk", data={"content": token});
                         }
                     }
                     break;
                 }
             }
-
             if int(max_iters) > 0 and iter_count > int(max_iters) {
                 yield StreamEvent(
                     event_type="steps_done",
@@ -1060,7 +987,6 @@ impl BaseLLM._ainvoke_streaming(
                 }
                 break;
             }
-
             try {
                 resp = await self.adispatch_no_streaming(mt_run);
             } except OutputConversionError {
@@ -1068,123 +994,78 @@ impl BaseLLM._ainvoke_streaming(
                 if recovery_resp is None {
                     raise;
                 }
-                async for event in self._ayield_recovery_result(
-                    recovery_resp, iter_count, mt_run
-                ) {
+                async for event in self._ayield_recovery_result(recovery_resp, iter_count, mt_run) {
                     yield event;
                 }
                 break;
             }
             self._usage_history.append(resp.usage);
-
             usage = resp.usage or {};
             total_tokens += int(
                 usage.get("total_tokens", 0)
                     if isinstance(usage, dict)
                     else getattr(usage, "total_tokens", 0)
             );
-
-            # Yield thought if the LLM produced reasoning text
             if resp.output and str(resp.output).strip() {
                 yield StreamEvent(
                     event_type="thought",
                     data={"content": str(resp.output).strip(), "iteration": iter_count}
                 );
             }
-
             if resp.tool_calls {
                 for tool_call in resp.tool_calls {
                     if tool_call.is_finish_call() {
                         mt_run.add_message(await tool_call.acall());
-                        yield StreamEvent(
-                            event_type="steps_done", data={"iterations": iter_count}
-                        );
+                        yield StreamEvent(event_type="steps_done", data={"iterations": iter_count});
                         async for token in self._astream_final_answer(mt_run) {
                             if token {
-                                yield StreamEvent(
-                                    event_type="chunk", data={"content": token}
-                                );
+                                yield StreamEvent(event_type="chunk", data={"content": token});
                             }
                         }
                         break;
                     } else {
-                        # Yield tool_call event before execution
                         yield StreamEvent(
                             event_type="tool_call",
                             data={
-                                "tool": tool_call.tool.get_name(),
-                                "args": tool_call.args,
-                                "call_id": tool_call.call_id,
-                                "iteration": iter_count
+                                "tool": tool_call.tool.get_name(), "args": tool_call.args,
+                                "call_id": tool_call.call_id, "iteration": iter_count
                             }
                         );
-                        # Execute the tool asynchronously
                         result_msg = await tool_call.acall();
                         last_tool = tool_call.tool.get_name();
-                        max_result_len = int(
-                            mt_run.call_params.get("max_tool_result_length")
-                            or self.call_params.get("max_tool_result_length")
-                            or _call_params_config.get("max_tool_result_length")
-                            or 500
-                        );
-                        truncated_result = result_msg.content[:max_result_len];
+                        truncated_result = result_msg.content[:self._max_tool_result_len(mt_run)];
                         last_result = truncated_result;
                         yield StreamEvent(
                             event_type="tool_result",
                             data={
-                                "tool": tool_call.tool.get_name(),
-                                "result": truncated_result,
-                                "call_id": tool_call.call_id,
-                                "iteration": iter_count
+                                "tool": tool_call.tool.get_name(), "result": truncated_result,
+                                "call_id": tool_call.call_id, "iteration": iter_count
                             }
                         );
                         mt_run.add_message(result_msg);
                     }
                 }
-                # If we broke out of the for loop due to finish_tool, break the while loop too
                 if tool_call.is_finish_call() {
                     break;
                 }
             } else {
                 recovery_resp = await self._aattempt_recovery(mt_run);
                 if recovery_resp is None {
-                    yield StreamEvent(
-                        event_type="steps_done", data={"iterations": iter_count}
-                    );
+                    yield StreamEvent(event_type="steps_done", data={"iterations": iter_count});
                     if resp.output {
-                        yield StreamEvent(
-                            event_type="chunk", data={"content": str(resp.output)}
-                        );
+                        yield StreamEvent(event_type="chunk", data={"content": str(resp.output)});
                     }
                     break;
                 }
-                async for event in self._ayield_recovery_result(
-                    recovery_resp, iter_count, mt_run
-                ) {
+                async for event in self._ayield_recovery_result(recovery_resp, iter_count, mt_run) {
                     yield event;
                 }
                 break;
             }
         }
     }
-    # Emit aggregated usage from all LLM calls in this invocation, then reset.
-    if self._usage_history {
-        totals: dict = {};
-        per_call_dicts: list = [];
-        for u in self._usage_history {
-            u_dict = u
-                if isinstance(u, dict)
-                else (u.model_dump() if u?.model_dump else vars(u));
-            per_call_dicts.append(u_dict);
-            for (k, v) in u_dict.items() {
-                if isinstance(v, (int, float)) {
-                    totals[k] = totals.get(k, 0) + v;
-                }
-            }
-        }
-        yield StreamEvent(
-            event_type="usage", data={"total": totals, "per_call": per_call_dicts}
-        );
-        self._usage_history = [];
+    usage_event = self._aggregate_usage();
+    if usage_event {
+        yield usage_event;
     }
 }
