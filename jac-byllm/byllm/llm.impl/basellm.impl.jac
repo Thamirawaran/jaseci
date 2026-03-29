@@ -967,3 +967,224 @@ impl BaseLLM._invoke_streaming(
         self._usage_history = [];
     }
 }
+
+# ---------------------------------------------------------------------------
+# _ainvoke_streaming — async streaming with logging, mirrors _invoke_streaming.
+# ---------------------------------------------------------------------------
+
+"""Invoke the LLM asynchronously with logging, yielding StreamEvent objects.
+
+Mirrors _invoke_streaming: yields StreamEvent for every intermediate step
+(thoughts, tool calls, results) and final answer chunks, using async I/O.
+"""
+impl BaseLLM._ainvoke_streaming(
+    mt_run: MTRuntime
+) -> AsyncGenerator[StreamEvent, None] {
+    # Reset per-call usage accumulator.
+    self._usage_history = [];
+    # No tools: wrap plain async streaming tokens in StreamEvent
+    if len(mt_run.tools) == 0 {
+        async for token in self.adispatch_streaming(mt_run) {
+            if token {
+                yield StreamEvent(event_type="chunk", data={"content": token});
+            }
+        }
+    } else {
+        # ReAct loop with tools
+        max_iters = (
+            mt_run.call_params.get("max_react_iterations")
+            or self.call_params.get("max_react_iterations")
+            or _call_params_config.get("max_react_iterations")
+            or 0
+        );
+        on_iteration = (
+            mt_run.call_params.get("on_iteration")
+            or self.call_params.get("on_iteration")
+        );
+        iter_count = 0;
+        last_tool = "";
+        last_result = "";
+        total_tokens = 0;
+        while True {
+            iter_count += 1;
+
+            if on_iteration and iter_count > 1 {
+                ctx = IterationContext(
+                    iteration=iter_count,
+                    messages=mt_run.messages,
+                    last_tool=last_tool,
+                    last_result=last_result,
+                    total_tokens=total_tokens
+                );
+                action = on_iteration(ctx);
+                if action == IterationAction.ABORT {
+                    yield StreamEvent(
+                        event_type="steps_done",
+                        data={"iterations": iter_count - 1, "reason": "aborted"}
+                    );
+                    if last_result {
+                        yield StreamEvent(
+                            event_type="chunk", data={"content": last_result}
+                        );
+                    }
+                    break;
+                }
+                if action == IterationAction.ABORT_WITH_SUMMARY {
+                    yield StreamEvent(
+                        event_type="steps_done",
+                        data={
+                            "iterations": iter_count - 1,
+                            "reason": "aborted_with_summary"
+                        }
+                    );
+                    async for token in self._astream_final_answer(mt_run) {
+                        if token {
+                            yield StreamEvent(
+                                event_type="chunk", data={"content": token}
+                            );
+                        }
+                    }
+                    break;
+                }
+            }
+
+            if int(max_iters) > 0 and iter_count > int(max_iters) {
+                yield StreamEvent(
+                    event_type="steps_done",
+                    data={"iterations": iter_count - 1, "reason": "max_iterations"}
+                );
+                async for token in self._astream_final_answer(mt_run) {
+                    if token {
+                        yield StreamEvent(event_type="chunk", data={"content": token});
+                    }
+                }
+                break;
+            }
+
+            try {
+                resp = await self.adispatch_no_streaming(mt_run);
+            } except OutputConversionError {
+                recovery_resp = await self._aattempt_recovery(mt_run);
+                if recovery_resp is None {
+                    raise;
+                }
+                async for event in self._ayield_recovery_result(
+                    recovery_resp, iter_count, mt_run
+                ) {
+                    yield event;
+                }
+                break;
+            }
+            self._usage_history.append(resp.usage);
+
+            usage = resp.usage or {};
+            total_tokens += int(
+                usage.get("total_tokens", 0)
+                    if isinstance(usage, dict)
+                    else getattr(usage, "total_tokens", 0)
+            );
+
+            # Yield thought if the LLM produced reasoning text
+            if resp.output and str(resp.output).strip() {
+                yield StreamEvent(
+                    event_type="thought",
+                    data={"content": str(resp.output).strip(), "iteration": iter_count}
+                );
+            }
+
+            if resp.tool_calls {
+                for tool_call in resp.tool_calls {
+                    if tool_call.is_finish_call() {
+                        mt_run.add_message(await tool_call.acall());
+                        yield StreamEvent(
+                            event_type="steps_done", data={"iterations": iter_count}
+                        );
+                        async for token in self._astream_final_answer(mt_run) {
+                            if token {
+                                yield StreamEvent(
+                                    event_type="chunk", data={"content": token}
+                                );
+                            }
+                        }
+                        break;
+                    } else {
+                        # Yield tool_call event before execution
+                        yield StreamEvent(
+                            event_type="tool_call",
+                            data={
+                                "tool": tool_call.tool.get_name(),
+                                "args": tool_call.args,
+                                "call_id": tool_call.call_id,
+                                "iteration": iter_count
+                            }
+                        );
+                        # Execute the tool asynchronously
+                        result_msg = await tool_call.acall();
+                        last_tool = tool_call.tool.get_name();
+                        max_result_len = int(
+                            mt_run.call_params.get("max_tool_result_length")
+                            or self.call_params.get("max_tool_result_length")
+                            or _call_params_config.get("max_tool_result_length")
+                            or 500
+                        );
+                        truncated_result = result_msg.content[:max_result_len];
+                        last_result = truncated_result;
+                        yield StreamEvent(
+                            event_type="tool_result",
+                            data={
+                                "tool": tool_call.tool.get_name(),
+                                "result": truncated_result,
+                                "call_id": tool_call.call_id,
+                                "iteration": iter_count
+                            }
+                        );
+                        mt_run.add_message(result_msg);
+                    }
+                }
+                # If we broke out of the for loop due to finish_tool, break the while loop too
+                if tool_call.is_finish_call() {
+                    break;
+                }
+            } else {
+                recovery_resp = await self._aattempt_recovery(mt_run);
+                if recovery_resp is None {
+                    yield StreamEvent(
+                        event_type="steps_done", data={"iterations": iter_count}
+                    );
+                    if resp.output {
+                        yield StreamEvent(
+                            event_type="chunk", data={"content": str(resp.output)}
+                        );
+                    }
+                    break;
+                }
+                async for event in self._ayield_recovery_result(
+                    recovery_resp, iter_count, mt_run
+                ) {
+                    yield event;
+                }
+                break;
+            }
+        }
+    }
+    # Emit aggregated usage from all LLM calls in this invocation, then reset.
+    if self._usage_history {
+        totals: dict = {};
+        per_call_dicts: list = [];
+        for u in self._usage_history {
+            u_dict = u
+                if isinstance(u, dict)
+                else (u.model_dump() if u?.model_dump else vars(u));
+            per_call_dicts.append(u_dict);
+            for (k, v) in u_dict.items() {
+                if isinstance(v, (int, float)) {
+                    totals[k] = totals.get(k, 0) + v;
+                }
+            }
+        }
+        yield StreamEvent(
+            event_type="usage", data={"total": totals, "per_call": per_call_dicts}
+        );
+        self._usage_history = [];
+    }
+}
