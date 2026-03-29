@@ -121,14 +121,19 @@ class JacRuntime {
         );
     }
 
-    """Call JacLLM asynchronously and return the result."""
-    @hookimpl
-    static def acall_llm(model: Model, mt_run: MTRuntime) -> object {
+    """Call JacLLM asynchronously and return the result.
+
+    Not a hookimpl — no matching hookspec exists in the Jac runtime yet.
+    Use directly: await JacRuntime.acall_llm(model, mt_run)
+    """
+    async static def acall_llm(model: Model, mt_run: MTRuntime) -> object {
         return await model.ainvoke(mt_run=mt_run);
     }
 
-    """Python library mode async decorator for Jac's by llm() syntax."""
-    @hookimpl
+    """Python library mode async decorator for Jac's by llm() syntax.
+
+    Usage: @Model(model_name="gpt-4o").aby()
+    """
     static def aby(model: Model) -> Callable {
         def _decorator(caller: Callable) -> Callable {
             async def _async_wrapped_caller(*args: object, **kwargs: object) -> object {
