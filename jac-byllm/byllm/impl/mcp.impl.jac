@@ -1,40 +1,98 @@
-"""Implementation of MCP client and tool wrapper."""
+"""Implementation of MCP client and tool wrapper.
+
+Architecture: MCP transports are stateful — they run background tasks
+(stdio reader/writer, SSE listener) that must stay alive between
+connect() and call_tool(). We run one persistent event loop in a
+daemon thread per McpClient. Sync methods post coroutines to it
+via asyncio.run_coroutine_threadsafe() and block on the result.
+
+This will simplify when byllm adds native async support.
+"""
 
 import asyncio;
 import logging;
+import threading;
 import from typing { Any }
 import from byllm.exceptions { McpError }
 
 glob logger = logging.getLogger("byllm.mcp");
 
-# ─── Async internals ────────────────────────────────────────────────────────
-# byllm is currently synchronous. We use asyncio.run() to bridge.
-# This will be replaced when byllm adds native async support.
+# ─── Background event loop ──────────────────────────────────────────────────
 
-async def _async_connect(client: McpClient, transport_type: str) -> None {
-    import from mcp.client.session { ClientSession }
-    import from mcp.client.stdio { StdioServerParameters, stdio_client }
-    import from mcp.client.sse { sse_client }
-    import from mcp.client.streamable_http { streamable_http_client }
-    import from datetime { timedelta }
-    import from byllm.mcp { McpTool }
+"""Shared state for one McpClient's background loop + session."""
+obj _McpState {
+    has loop: object = None,
+        thread: object = None,
+        session: object = None,
+        tools_cache: list = [],
+        connected: bool = False;
 
-    (read_stream, write_stream) = await _open_transport(
-        client, transport_type,
-        StdioServerParameters, stdio_client,
-        sse_client, streamable_http_client
+    def start_loop -> None;
+    def run(coro: object) -> object;
+    def stop -> None;
+}
+
+impl _McpState.start_loop -> None {
+    self.loop = asyncio.new_event_loop();
+    self.thread = threading.Thread(
+        target=self.loop.run_forever, daemon=True
     );
+    self.thread.start();
+}
+
+impl _McpState.run(coro: object) -> object {
+    future = asyncio.run_coroutine_threadsafe(coro, self.loop);
+    return future.result(timeout=120);
+}
+
+impl _McpState.stop -> None {
+    if self.loop and self.loop.is_running() {
+        self.loop.call_soon_threadsafe(self.loop.stop);
+    }
+    if self.thread and self.thread.is_alive() {
+        self.thread.join(timeout=5);
+    }
+    if self.loop and not self.loop.is_closed() {
+        self.loop.close();
+    }
+    self.loop = None;
+    self.thread = None;
+    self.session = None;
+    self.tools_cache = [];
+    self.connected = False;
+}
+
+# Module-level dict mapping McpClient id -> _McpState.
+# This avoids adding internal state fields to the public McpClient obj.
+glob _states: dict = {};
+
+def _get_state(client: McpClient) -> _McpState {
+    cid = id(client);
+    if cid not in _states {
+        _states[cid] = _McpState();
+    }
+    return _states[cid];
+}
+
+# ─── Async internals ────────────────────────────────────────────────────────
+
+async def _do_connect(client: McpClient, transport_type: str) -> None {
+    import from mcp.client.session { ClientSession }
+    import from datetime { timedelta }
+
+    state = _get_state(client);
+    (read_stream, write_stream) = await _open_transport(client, transport_type);
 
     session_ctx = ClientSession(
         read_stream, write_stream,
         read_timeout_seconds=timedelta(seconds=client.timeout)
     );
-    client._session = await session_ctx.__aenter__();
-    client._cleanup_fns.append(session_ctx.__aexit__);
-    await client._session.initialize();
+    state.session = await session_ctx.__aenter__();
+    await state.session.initialize();
 
-    tools_result = await client._session.list_tools();
-    client._tools_cache = [
+    tools_result = await state.session.list_tools();
+    import from byllm.mcp { McpTool }
+    state.tools_cache = [
         McpTool(
             name=t.name,
             description=t.description or "",
@@ -43,17 +101,18 @@ async def _async_connect(client: McpClient, transport_type: str) -> None {
         )
         for t in tools_result.tools
     ];
-    client._connected = True;
+    state.connected = True;
     logger.info(
         f"[MCP] Connected via {transport_type} — "
-        f"{len(client._tools_cache)} tool(s) discovered."
+        f"{len(state.tools_cache)} tool(s) discovered."
     );
 }
 
-async def _async_call_tool(
+async def _do_call_tool(
     client: McpClient, name: str, arguments: dict[str, Any]
 ) -> str {
-    result = await client._session.call_tool(name, arguments);
+    state = _get_state(client);
+    result = await state.session.call_tool(name, arguments);
     parts: list[str] = [];
     for item in (result.content or []) {
         if hasattr(item, 'text') {
@@ -65,38 +124,21 @@ async def _async_call_tool(
     return "\n".join(parts) if parts else "MCP tool returned no content.";
 }
 
-async def _async_close(client: McpClient) -> None {
-    for cleanup_fn in reversed(client._cleanup_fns) {
-        try {
-            await cleanup_fn(None, None, None);
-        } except Exception as e {
-            logger.debug(f"Cleanup error: {e}");
-        }
-    }
-}
-
-"""Open an MCP transport and return (read_stream, write_stream)."""
-async def _open_transport(
-    client: McpClient,
-    transport_type: str,
-    StdioServerParameters: type,
-    stdio_client: object,
-    sse_client: object,
-    streamable_http_client: object
-) -> tuple {
-    ctx: object = None;
+async def _open_transport(client: McpClient, transport_type: str) -> tuple {
     if transport_type == "stdio" {
+        import from mcp.client.stdio { StdioServerParameters, stdio_client }
         env = client.env if client.env else None;
-        params = StdioServerParameters(
+        ctx = stdio_client(StdioServerParameters(
             command=client.command, args=client.args, env=env
-        );
-        ctx = stdio_client(params);
+        ));
     } elif transport_type == "sse" {
+        import from mcp.client.sse { sse_client }
         ctx = sse_client(
             client.url, headers=client.headers or None,
             timeout=float(client.timeout)
         );
     } elif transport_type == "streamable-http" {
+        import from mcp.client.streamable_http { streamable_http_client }
         ctx = streamable_http_client(
             client.url, headers=client.headers or None
         );
@@ -107,14 +149,14 @@ async def _open_transport(
         );
     }
     streams = await ctx.__aenter__();
-    client._cleanup_fns.append(ctx.__aexit__);
     return (streams[0], streams[1]);
 }
 
-# ─── McpClient sync methods ─────────────────────────────────────────────────
+# ─── McpClient ──────────────────────────────────────────────────────────────
 
 impl McpClient.connect -> None {
-    if self._connected {
+    state = _get_state(self);
+    if state.connected {
         return;
     }
     try {
@@ -137,32 +179,39 @@ impl McpClient.connect -> None {
             );
         }
     }
+    state.start_loop();
     try {
-        asyncio.run(_async_connect(self, transport_type));
+        state.run(_do_connect(self, transport_type));
     } except McpError {
+        state.stop();
         raise;
     } except Exception as e {
+        state.stop();
         raise McpError(message=f"Failed to connect to MCP server: {e}");
     }
 }
 
 impl McpClient.get_tools(names: list[str] | None = None) -> list {
-    if not self._connected {
+    state = _get_state(self);
+    if not state.connected {
         self.connect();
+        state = _get_state(self);
     }
     if names is None {
-        return list(self._tools_cache);
+        return list(state.tools_cache);
     }
     names_set = set(names);
-    return [t for t in self._tools_cache if t.name in names_set];
+    return [t for t in state.tools_cache if t.name in names_set];
 }
 
 impl McpClient.call_tool(name: str, arguments: dict[str, Any]) -> str {
-    if not self._connected {
+    state = _get_state(self);
+    if not state.connected {
         self.connect();
+        state = _get_state(self);
     }
     try {
-        return asyncio.run(_async_call_tool(self, name, arguments));
+        return state.run(_do_call_tool(self, name, arguments));
     } except McpError {
         raise;
     } except Exception as e {
@@ -171,18 +220,15 @@ impl McpClient.call_tool(name: str, arguments: dict[str, Any]) -> str {
 }
 
 impl McpClient.close -> None {
-    if not self._connected {
+    state = _get_state(self);
+    if not state.connected {
         return;
     }
-    try {
-        asyncio.run(_async_close(self));
-    } except Exception as e {
-        logger.debug(f"Error during MCP close: {e}");
+    state.stop();
+    cid = id(self);
+    if cid in _states {
+        del _states[cid];
     }
-    self._connected = False;
-    self._tools_cache = [];
-    self._session = None;
-    self._cleanup_fns = [];
 }
 
 # ─── McpTool ────────────────────────────────────────────────────────────────

@@ -22,6 +22,9 @@ Supports three transports:
   - stdio: Local subprocess (set command + args)
   - sse: Remote SSE server (set url, transport="sse")
   - streamable-http: Remote HTTP (set url, default for HTTP)
+
+Internally runs one background event loop thread to keep MCP
+transport alive between connect() and close().
 """
 obj McpClient {
     has command: str = "",
@@ -30,11 +33,7 @@ obj McpClient {
         url: str = "",
         headers: dict[str, str] = {},
         transport: str = "auto",
-        timeout: int = 30,
-        _connected: bool = False,
-        _tools_cache: list = [],
-        _session: object = None,
-        _cleanup_fns: list = [];
+        timeout: int = 30;
 
     def connect -> None;
     def get_tools(names: list[str] | None = None) -> list;
