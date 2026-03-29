@@ -47,7 +47,8 @@ impl _emit_agent_telemetry(
     # --- Extract agent response ---
     agent_response = "";
     if result is not None {
-        if isinstance(result, _types_mod.GeneratorType) {
+        if isinstance(result, _types_mod.GeneratorType)
+            or isinstance(result, _types_mod.AsyncGeneratorType) {
             agent_response = "[streaming]";
         } else {
             agent_response = str(result)[:2000];

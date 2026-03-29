@@ -16,7 +16,9 @@ import from byllm.exceptions {
 import from byllm.telemetry { register_agent_callback }
 
 glob by = JacRuntime.by ,
+     aby = JacRuntime.aby ,
      __all__ = [
+         'aby',
          'by',
          'ByLLMError',
          'AuthenticationError',

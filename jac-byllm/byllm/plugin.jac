@@ -121,6 +121,38 @@ class JacRuntime {
         );
     }
 
+    """Call JacLLM asynchronously and return the result."""
+    @hookimpl
+    static def acall_llm(model: Model, mt_run: MTRuntime) -> object {
+        return await model.ainvoke(mt_run=mt_run);
+    }
+
+    """Python library mode async decorator for Jac's by llm() syntax."""
+    @hookimpl
+    static def aby(model: Model) -> Callable {
+        def _decorator(caller: Callable) -> Callable {
+            async def _async_wrapped_caller(*args: object, **kwargs: object) -> object {
+                import from byllm.mtir { MTIR }
+                invoke_args: dict[(int | str, object)] = {};
+                for (i, arg) in enumerate(args) {
+                    invoke_args[i] = arg;
+                }
+                for (key, value) in kwargs.items() {
+                    invoke_args[key] = value;
+                }
+                mtir = MTIR(
+                    caller=caller,
+                    args=invoke_args,
+                    call_params=model.call_params,
+                    ir_info=fetch_mtir(caller)
+                ).runtime;
+                return await model.ainvoke(mt_run=mtir);
+            }
+            return _async_wrapped_caller;
+        }
+        return _decorator;
+    }
+
     """Return a configured Model from jac.toml for the builtin llm."""
     @hookimpl
     static def default_llm -> object {
