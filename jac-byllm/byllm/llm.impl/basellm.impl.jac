@@ -314,6 +314,88 @@ impl BaseLLM.model_call_with_stream(params: dict) -> Generator[str, None, None] 
     );
 }
 
+# ---------------------------------------------------------------------------
+# Async model call abstracts — subclasses override with real async I/O.
+# ---------------------------------------------------------------------------
+
+"""Async model call without streaming. Subclasses must override."""
+impl BaseLLM.amodel_call_no_stream(params: dict) -> dict {
+    raise NotImplementedError(
+        "Subclasses must implement this method for async LLM call without streaming."
+    );
+}
+
+"""Async model call with streaming. Subclasses must override."""
+impl BaseLLM.amodel_call_with_stream(params: dict) -> AsyncGenerator[str, None] {
+    raise NotImplementedError(
+        "Subclasses must implement this method for async LLM call with streaming."
+    );
+}
+
+# ---------------------------------------------------------------------------
+# Async dispatch — mirrors dispatch_no_streaming / dispatch_streaming.
+# ---------------------------------------------------------------------------
+
+"""Dispatch the LLM call without streaming, asynchronously.
+
+Mirrors dispatch_no_streaming: builds params, calls the async model,
+parses tool calls and response.
+"""
+impl BaseLLM.adispatch_no_streaming(mt_run: MTRuntime) -> CompletionResult {
+    params = self.make_model_params(mt_run);
+    log_params = self.format_prompt(params);
+    self.log_info(f"Calling LLM (async): {self.model_name} with params: {log_params}");
+    self.api_base = params.pop("api_base", DEFAULT_BASE_URL);
+    params.pop("api_key", None);
+    response = await self.amodel_call_no_stream(params);
+    message: LiteLLMMessage = response.get("choices", [])[0].get(
+        "message"
+    );  # type: ignore
+    mt_run.add_message(message);
+    output_content: str = message.get("content") or "";  # type: ignore
+    self.log_info(f"LLM call completed with response: {output_content}");
+    tool_calls: list[ToolCall] = [];
+    tool_calls_list = (message or {}).get("tool_calls") or [];
+    for tool_call in tool_calls_list {
+        if tool := mt_run.get_tool(tool_call.function.name) {
+            args_json = json.loads(tool_call.function.arguments);
+            args = tool.parse_arguments(args_json);
+            tool_calls.append(ToolCall(call_id=tool_call.id, tool=tool, args=args));
+        } else {
+            raise UnknownToolError(
+                f"Attempted to call tool: '{tool_call.function.name}' which was not present."
+            );
+        }
+    }
+    output_value = mt_run.parse_response(output_content)
+        if not tool_calls_list
+        else output_content;
+    usage_data = response.get("usage", {});
+    return CompletionResult(
+        output=output_value, tool_calls=tool_calls, usage=usage_data
+    );
+}
+
+"""Dispatch the LLM call with async streaming.
+
+Mirrors dispatch_streaming: builds params, calls the async streaming model,
+yields content chunks as they arrive.
+"""
+impl BaseLLM.adispatch_streaming(mt_run: MTRuntime) -> AsyncGenerator[str, None] {
+    params = self.make_model_params(mt_run);
+    log_params = self.format_prompt(params);
+    self.log_info(f"Calling LLM (async): {self.model_name} with params:\n{log_params}");
+    self.api_base = params.pop("api_base", DEFAULT_BASE_URL);
+    params.pop("api_key", None);
+    response = await self.amodel_call_with_stream(params);
+    async for chunk in response {
+        if chunk?.choices and chunk?.choices?[0]?.delta {
+            delta = chunk.choices[0].delta;
+            yield delta.content or "";
+        }
+    }
+}
+
 """Force LLM to produce a final answer (non-streaming). Restricts tools to finish_tool only."""
 impl BaseLLM._force_final_answer(mt_run: MTRuntime) -> object {
     final_instruction = Message(
