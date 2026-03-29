@@ -229,10 +229,10 @@ impl MTRuntime.parse_response(response: str) -> object {
     return response;
 }
 
-"""Get a tool by its function name."""
-impl MTRuntime.get_tool(tool_name: str) -> Tool | None {
+"""Get a tool by name. Works for both Tool and McpTool."""
+impl MTRuntime.get_tool(tool_name: str) -> Tool | McpTool | None {
     for tool in self.tools {
-        if tool.func.__name__ == tool_name {
+        if tool.get_name() == tool_name {
             return tool;
         }
     }
