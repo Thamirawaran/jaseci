@@ -152,3 +152,124 @@ impl Model.model_call_http(
     );
     return response.json();
 }
+
+# ---------------------------------------------------------------------------
+# Async counterparts
+# ---------------------------------------------------------------------------
+
+"""Invoke the LLM asynchronously, delegating to MockLLM if applicable.
+
+Wraps the full invocation with telemetry, mirroring Model.invoke.
+"""
+impl Model.ainvoke(mt_run: MTRuntime) -> object {
+    import uuid;
+    import time;
+
+    mt_run._invocation_id = str(uuid.uuid4());
+    _start = time.time();
+
+    try {
+        result = await self._mock_delegate.ainvoke(mt_run)
+            if self._mock_delegate
+            else await super.ainvoke(mt_run);
+
+        _emit_agent_telemetry(
+            mt_run, result, self.model_name,
+            (time.time() - _start) * 1000, "success", None
+        );
+        return result;
+    } except Exception as e {
+        _emit_agent_telemetry(
+            mt_run, None, self.model_name,
+            (time.time() - _start) * 1000, "error", e
+        );
+        raise;
+    }
+}
+
+"""Make an async model call without streaming.
+
+Uses AsyncOpenAI if proxy mode, litellm.acompletion otherwise.
+HTTP client falls back to asyncio.to_thread since requests is sync.
+"""
+impl Model.amodel_call_no_stream(params: dict) -> dict {
+    import asyncio;
+    try {
+        if self.http_client {
+            response = await asyncio.to_thread(
+                self.model_call_http,
+                url=self.api_base, token=self.api_key,
+                payload=params,
+                ca_bundle=self.config.get("ca_bundle", None),
+            );
+        } elif self.proxy {
+            import from openai { AsyncOpenAI }
+            client = AsyncOpenAI(
+                base_url=self.api_base, api_key=self.api_key or None
+            );
+            response = await client.chat.completions.create(**params);
+        } else {
+            response = await litellm.acompletion(
+                api_key=self.api_key or None, **params
+            );
+        }
+    } except litellm.exceptions.AuthenticationError as e {
+        logger.error(f"LLM AuthenticationError: {e}");
+        raise AuthenticationError(str(e));
+    } except openai.AuthenticationError as e {
+        logger.error(f"LLM AuthenticationError: {e}");
+        raise AuthenticationError(str(e));
+    } except litellm.exceptions.RateLimitError as e {
+        logger.error(f"LLM RateLimitError: {e}");
+        raise RateLimitError(str(e));
+    } except openai.RateLimitError as e {
+        logger.error(f"LLM RateLimitError: {e}");
+        raise RateLimitError(str(e));
+    } except litellm.exceptions.NotFoundError as e {
+        logger.error(f"LLM ModelNotFoundError: {e}");
+        raise ModelNotFoundError(str(e));
+    } except openai.NotFoundError as e {
+        logger.error(f"LLM ModelNotFoundError: {e}");
+        raise ModelNotFoundError(str(e));
+    } except Exception as e {
+        logger.error(f"LLM call failed with {type(e).__name__}: {e}");
+        raise;
+    }
+    return response;
+}
+
+"""Make an async model call with streaming.
+
+Uses AsyncOpenAI if proxy mode, litellm.acompletion with stream=True otherwise.
+"""
+impl Model.amodel_call_with_stream(params: dict) {
+    import asyncio;
+    try {
+        if self.proxy {
+            import from openai { AsyncOpenAI }
+            client = AsyncOpenAI(
+                base_url=self.api_base, api_key=self.api_key or None
+            );
+            response = await client.chat.completions.create(
+                stream=True, **params
+            );
+        } else {
+            response = await litellm.acompletion(
+                stream=True, api_key=self.api_key or None, **params
+            );
+        }
+    } except litellm.exceptions.AuthenticationError as e {
+        raise AuthenticationError(str(e));
+    } except openai.AuthenticationError as e {
+        raise AuthenticationError(str(e));
+    } except litellm.exceptions.RateLimitError as e {
+        raise RateLimitError(str(e));
+    } except openai.RateLimitError as e {
+        raise RateLimitError(str(e));
+    } except litellm.exceptions.NotFoundError as e {
+        raise ModelNotFoundError(str(e));
+    } except openai.NotFoundError as e {
+        raise ModelNotFoundError(str(e));
+    }
+    return response;
+}
