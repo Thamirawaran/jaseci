@@ -396,6 +396,227 @@ impl BaseLLM.adispatch_streaming(mt_run: MTRuntime) -> AsyncGenerator[str, None]
     }
 }
 
+# ---------------------------------------------------------------------------
+# Async helpers — mirror _force_final_answer, _stream_final_answer,
+# _attempt_recovery, _yield_recovery_result.
+# ---------------------------------------------------------------------------
+
+"""Force LLM to produce a final answer asynchronously (non-streaming)."""
+impl BaseLLM._aforce_final_answer(mt_run: MTRuntime) -> object {
+    final_instruction = Message(
+        role=MessageRole.USER,
+        content="Based on the tool calls and their results above, provide only your final answer.",
+    );
+    mt_run.add_message(final_instruction);
+    original_tools = mt_run.tools;
+    finish_tool_obj = mt_run.get_tool("finish_tool");
+    mt_run.tools = [finish_tool_obj] if finish_tool_obj else [];
+    try {
+        final_resp = await self.adispatch_no_streaming(mt_run);
+        if final_resp.tool_calls {
+            for tool_call in final_resp.tool_calls {
+                if tool_call.is_finish_call() {
+                    mt_run.add_message(await tool_call.acall());
+                    return tool_call.get_output();
+                }
+            }
+        }
+        return str(final_resp.output) if final_resp.output else "";
+    } finally {
+        mt_run.tools = original_tools;
+    }
+}
+
+"""Stream the final answer asynchronously after ReAct tool calls complete."""
+impl BaseLLM._astream_final_answer(mt_run: MTRuntime) -> AsyncGenerator[str, None] {
+    final_instruction = Message(
+        role=MessageRole.USER,
+        content="Based on the tool calls and their results above, provide your final answer. "
+        "Be comprehensive and synthesize all the information gathered.",
+    );
+    mt_run.add_message(final_instruction);
+    original_tools = mt_run.tools;
+    finish_tool_obj = mt_run.get_tool("finish_tool");
+    mt_run.tools = [finish_tool_obj] if finish_tool_obj else [];
+    original_tool_choice = mt_run.call_params.pop("tool_choice", None);
+    mt_run.call_params["tool_choice"] = "none";
+    try {
+        async for token in self.adispatch_streaming(mt_run) {
+            yield token;
+        }
+    } finally {
+        mt_run.tools = original_tools;
+        mt_run.call_params.pop("tool_choice", None);
+        if original_tool_choice is not None {
+            mt_run.call_params["tool_choice"] = original_tool_choice;
+        }
+    }
+}
+
+"""Attempt async finish_tool recovery when the LLM skips the expected workflow."""
+impl BaseLLM._aattempt_recovery(mt_run: MTRuntime) -> CompletionResult | None {
+    finish_tool_obj = mt_run.get_tool("finish_tool");
+    if not finish_tool_obj or mt_run.resp_type is None or mt_run.resp_type is str {
+        return None;
+    }
+    recovery_msg = Message(
+        role=MessageRole.USER,
+        content="You must use finish_tool to return your response. Call finish_tool now.",
+    );
+    mt_run.add_message(recovery_msg);
+    original_tools = mt_run.tools;
+    mt_run.tools = [finish_tool_obj];
+    try {
+        return await self.adispatch_no_streaming(mt_run);
+    } finally {
+        mt_run.tools = original_tools;
+    }
+}
+
+"""Process a recovery CompletionResult for async streaming, yielding StreamEvents."""
+impl BaseLLM._ayield_recovery_result(
+    recovery_resp: CompletionResult, iter_count: int, mt_run: MTRuntime
+) -> AsyncGenerator[StreamEvent, None] {
+    self._usage_history.append(recovery_resp.usage);
+    finish_found = False;
+    if recovery_resp.tool_calls {
+        for tool_call in recovery_resp.tool_calls {
+            if tool_call.is_finish_call() {
+                mt_run.add_message(await tool_call.acall());
+                finish_found = True;
+                break;
+            }
+        }
+    }
+    yield StreamEvent(event_type="steps_done", data={"iterations": iter_count});
+    if finish_found {
+        async for token in self._astream_final_answer(mt_run) {
+            if token {
+                yield StreamEvent(event_type="chunk", data={"content": token});
+            }
+        }
+    } elif recovery_resp.output {
+        yield StreamEvent(
+            event_type="chunk", data={"content": str(recovery_resp.output)}
+        );
+    }
+}
+
+# ---------------------------------------------------------------------------
+# ainvoke — async ReAct loop, mirrors BaseLLM.invoke.
+# ---------------------------------------------------------------------------
+
+"""Invoke the LLM asynchronously with the given MTRuntime.
+
+Mirrors BaseLLM.invoke: handles streaming, non-streaming, and ReAct loops
+with await at all I/O points.
+"""
+impl BaseLLM.ainvoke(mt_run: MTRuntime) -> object {
+    # If logging is enabled with streaming, yield StreamEvent objects
+    if mt_run.stream and mt_run.call_params.get("logging", False) {
+        return self._ainvoke_streaming(mt_run);
+    }
+    # If streaming without tools, stream immediately
+    if mt_run.stream and len(mt_run.tools) == 0 {
+        return self.adispatch_streaming(mt_run);
+    }
+    max_iters = (
+        mt_run.call_params.get("max_react_iterations")
+        or self.call_params.get("max_react_iterations")
+        or _call_params_config.get("max_react_iterations")
+        or 0
+    );
+    on_iteration = (
+        mt_run.call_params.get("on_iteration") or self.call_params.get("on_iteration")
+    );
+    iter_count = 0;
+    last_tool = "";
+    last_result = "";
+    total_tokens = 0;
+    while True {
+        iter_count += 1;
+        if on_iteration and iter_count > 1 {
+            ctx = IterationContext(
+                iteration=iter_count,
+                messages=mt_run.messages,
+                last_tool=last_tool,
+                last_result=last_result,
+                total_tokens=total_tokens
+            );
+            action = on_iteration(ctx);
+            if action == IterationAction.ABORT {
+                return last_result;
+            }
+            if action == IterationAction.ABORT_WITH_SUMMARY {
+                if mt_run.stream {
+                    return self._astream_final_answer(mt_run);
+                }
+                return await self._aforce_final_answer(mt_run);
+            }
+        }
+        if int(max_iters) > 0 and iter_count > int(max_iters) {
+            if mt_run.stream {
+                return self._astream_final_answer(mt_run);
+            }
+            return await self._aforce_final_answer(mt_run);
+        }
+        try {
+            resp = await self.adispatch_no_streaming(mt_run);
+        } except OutputConversionError {
+            recovery_resp = await self._aattempt_recovery(mt_run);
+            if recovery_resp is None {
+                raise;
+            }
+            if recovery_resp.tool_calls {
+                for tool_call in recovery_resp.tool_calls {
+                    if tool_call.is_finish_call() {
+                        mt_run.add_message(await tool_call.acall());
+                        return tool_call.get_output();
+                    }
+                }
+            }
+            return recovery_resp.output;
+        }
+        usage = resp.usage or {};
+        total_tokens += int(
+            usage.get("total_tokens", 0)
+                if isinstance(usage, dict)
+                else getattr(usage, "total_tokens", 0)
+        );
+        if resp.tool_calls {
+            for tool_call in resp.tool_calls {
+                if tool_call.is_finish_call() {
+                    mt_run.add_message(await tool_call.acall());
+                    if mt_run.stream {
+                        return self._astream_final_answer(mt_run);
+                    }
+                    return tool_call.get_output();
+                } else {
+                    result_msg = await tool_call.acall();
+                    last_tool = tool_call.tool.get_name();
+                    last_result = str(result_msg.content)[:500];
+                    mt_run.add_message(result_msg);
+                }
+            }
+        } else {
+            recovery_resp = await self._aattempt_recovery(mt_run);
+            if recovery_resp is None {
+                break;
+            }
+            if recovery_resp.tool_calls {
+                for tool_call in recovery_resp.tool_calls {
+                    if tool_call.is_finish_call() {
+                        mt_run.add_message(await tool_call.acall());
+                        return tool_call.get_output();
+                    }
+                }
+            }
+            return recovery_resp.output;
+        }
+    }
+    return resp.output;
+}
+
 """Force LLM to produce a final answer (non-streaming). Restricts tools to finish_tool only."""
 impl BaseLLM._force_final_answer(mt_run: MTRuntime) -> object {
     final_instruction = Message(
