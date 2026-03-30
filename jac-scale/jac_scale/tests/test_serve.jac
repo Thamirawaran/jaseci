@@ -257,13 +257,14 @@ test "static and schema endpoints" {
         assert response.status_code == 200 , "Health check should return 200";
         assert response.json() == {"status": "ok"};
 
-        # Test: docs are disabled in production mode
+        # Test: docs endpoints are accessible
         response = client.get("/docs");
-        assert response.status_code == 404 , "Docs should be disabled in production mode";
+        assert response.status_code == 200 , "Docs endpoint should return 200";
+        response = client.get("/redoc");
+        assert response.status_code == 200 , "ReDoc endpoint should return 200";
 
-        # Test: custom response headers from config (use /graph which is always available)
-        response = client.get("/graph");
-        assert response.status_code == 200;
+        # Test: custom response headers from config
+        response = client.get("/docs");
         assert "x-custom-test-header" in response.headers;
         assert response.headers["x-custom-test-header"] == "test-value";
         assert "cross-origin-opener-policy" in response.headers;
@@ -271,8 +272,10 @@ test "static and schema endpoints" {
         assert "cross-origin-embedder-policy" in response.headers;
         assert response.headers["cross-origin-embedder-policy"] == "require-corp";
 
-        # Test: OpenAPI schema via app.openapi() (not HTTP since docs are disabled in production)
-        openapi_spec = client._server.server.app.openapi();
+        # Test: OpenAPI schema is accessible and correct
+        openapi_response = client.get("/openapi.json");
+        assert openapi_response.status_code == 200;
+        openapi_spec = openapi_response.json();
         paths = openapi_spec.get("paths", {});
 
         # Test: refresh endpoint in openapi docs
@@ -1834,7 +1837,7 @@ test "server startup - port fallback integration" {
     }
 }
 
-"""Test that jac start --client pwa uses jac-scale server (422 from /user/login = FastAPI validation)."""
+"""Test that jac start --client pwa uses jac-scale server (has /docs endpoint)."""
 test "pwa target uses jac-scale server" {
     import tempfile;
 
@@ -1875,15 +1878,17 @@ theme_color = "#000000"
             text=True
         );
         try {
-            # Wait for server to start and verify jac-scale's FastAPI is running
-            # POST /user/login with empty body returns 422 (FastAPI validation) — base HTTP server would 404
+            # Wait for server to start and verify /docs endpoint (jac-scale's FastAPI)
             for _ in range(30) {
                 try {
-                    resp = requests.post(
-                        f"http://127.0.0.1:{port}/user/login", json={}, timeout=2
-                    );
-                    if resp.status_code == 422 {
-                        return;  # Test passed — jac-scale's FastAPI is running
+                    resp = requests.get(f"http://127.0.0.1:{port}/docs", timeout=2);
+                    if resp.status_code == 200 {
+                        # /docs exists = jac-scale's FastAPI server is running
+                        assert "swagger" in resp.text.lower()
+                        or "openapi" in resp.text.lower() , (
+                            "/docs should be FastAPI Swagger UI"
+                        );
+                        return;  # Test passed
 
                     }
                 } except (requests.ConnectionError, requests.Timeout) {
@@ -1894,7 +1899,7 @@ theme_color = "#000000"
             server.terminate();
             (stdout, stderr) = server.communicate(timeout=5);
             raise AssertionError(
-                f"Server did not start or jac-scale not detected.\nSTDOUT: {stdout}\nSTDERR: {stderr}"
+                f"Server did not start or /docs not available.\nSTDOUT: {stdout}\nSTDERR: {stderr}"
             );
         } finally {
             server.terminate();

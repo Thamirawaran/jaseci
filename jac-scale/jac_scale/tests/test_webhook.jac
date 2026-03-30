@@ -506,7 +506,7 @@ test "webhook without mongo - endpoint exists" {
     original_mongodb_uri = os.environ.pop("MONGODB_URI", None);
     client = make_client();
     try {
-        schema = client._server.server.app.openapi();
+        schema = client.get("/openapi.json").json();
         paths = schema.get("paths", {});
 
         assert "/webhook/PaymentReceived" in paths , (
@@ -527,7 +527,7 @@ test "webhook without mongo - normal walker not in webhook" {
     original_mongodb_uri = os.environ.pop("MONGODB_URI", None);
     client = make_client();
     try {
-        schema = client._server.server.app.openapi();
+        schema = client.get("/openapi.json").json();
         paths = schema.get("paths", {});
 
         assert "/webhook/NormalPayment" not in paths , (
