@@ -4,6 +4,8 @@ This document provides a summary of new features, improvements, and bug fixes in
 
 ## jac-scale 0.2.12 (Unreleased)
 
+- **Fix: FastAPI docs inaccessible in normal mode**: PR #5363 disabled `/docs`, `/redoc`, and `/openapi.json` by default but only re-enabled them in dev mode, breaking docs access for `jac serve` / `jac start` (without `--dev`). Reverted to FastAPI's default (docs enabled) so all modes have docs access. Production lockdown should be handled at the infrastructure layer (reverse proxy, ingress rules).
+
 ## jac-scale 0.2.11 (Latest Release)
 
 - **Fix: Sandbox status returns stale RUNNING for dead pods**: `KubernetesSandbox.status()` was returning the cached registry state (often `RUNNING`) when `read_namespaced_pod_status()` threw an exception (pod deleted or unreachable). This caused callers to believe the sandbox was still alive, preventing recovery. Now returns `STOPPED` when the pod query fails so dead pods are detected immediately.
