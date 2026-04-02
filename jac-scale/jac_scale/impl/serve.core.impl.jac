@@ -209,18 +209,6 @@ impl JacAPIServerCore.start(
             }
         }
     }
-    if dev {
-        self.register_dynamic_walker_endpoint();
-        self.register_dynamic_function_endpoint();
-        self.register_dynamic_introspection_endpoints();
-        self.register_dynamic_webhook_endpoint();
-        self.register_dynamic_websocket_endpoint();
-    } else {
-        self.register_walkers_endpoints();
-        self.register_functions_endpoints();
-        self.register_webhook_endpoints();
-        self.register_websocket_endpoints();
-    }
     self._register_endpoints();
     if dev {
         # Add middleware to refresh endpoints on HMR file changes
