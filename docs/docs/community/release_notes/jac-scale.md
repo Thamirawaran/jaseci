@@ -4,7 +4,10 @@ This document provides a summary of new features, improvements, and bug fixes in
 
 ## jac-scale 0.2.12 (Unreleased)
 
+- **Pre-built Admin Dashboard**: The admin dashboard UI is now pre-built during the release process and shipped as static assets in the package. Previously, navigating to `/admin/` on first load triggered a full Vite build from source, causing significant lag. The server now copies bundled assets instantly, falling back to source build only in dev mode.
+- **Dev Mode: Named endpoints in Swagger docs**: Dev mode (`jac start --dev`) now registers individual named endpoints (e.g. `/walker/read_todos`) instead of generic catch-all routes (`/walker/{walker_name}`), so Swagger UI shows all walker/function names. HMR still works - routes are refreshed automatically on file changes.
 - **Fix: FastAPI docs inaccessible in normal mode**: PR #5363 disabled `/docs`, `/redoc`, and `/openapi.json` by default but only re-enabled them in dev mode, breaking docs access for `jac serve` / `jac start` (without `--dev`). Reverted to FastAPI's default (docs enabled) so all modes have docs access. Production lockdown should be handled at the infrastructure layer (reverse proxy, ingress rules).
+- 2 small refactors/changes.
 
 ## jac-scale 0.2.11 (Latest Release)
 
