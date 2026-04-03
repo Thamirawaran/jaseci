@@ -3,9 +3,21 @@
 import from typing { Any }
 import re;
 
-"""Return list of available tools with schemas."""
+"""Read MCP plugin config from jac.toml [plugins.mcp] section."""
+def _get_mcp_config -> dict[str, object] {
+    try {
+        import from jaclang.project.config { get_config }
+        jac_cfg = get_config();
+        if jac_cfg {
+            return jac_cfg.get_plugin_config("mcp");
+        }
+    } except Exception { }
+    return {};
+}
+
+"""Return list of available tools with schemas, filtered by [plugins.mcp] config."""
 impl ToolProvider.list_tools -> list[dict[str, Any]] {
-    return [
+    all_tools: list[dict[str, Any]] = [
         {
             "name": "validate_jac",
             "description": "Validate Jac code with full type checking. Returns structured errors and warnings.",
@@ -380,6 +392,32 @@ impl ToolProvider.list_tools -> list[dict[str, Any]] {
         },
 
     ];
+
+    # Filter tools based on [plugins.mcp] config toggles
+    cfg = _get_mcp_config();
+    disabled: set[str] = set();
+    if not cfg.get("enable_validate", True) {
+        disabled.add("validate_jac");
+        disabled.add("check_syntax");
+    }
+    if not cfg.get("enable_format", True) {
+        disabled.add("format_jac");
+        disabled.add("lint_jac");
+    }
+    if not cfg.get("enable_py2jac", True) {
+        disabled.add("py_to_jac");
+    }
+    if not cfg.get("enable_ast", False) {
+        disabled.add("get_ast");
+    }
+    if disabled {
+        return [
+            t
+            for t in all_tools
+            if t["name"] not in disabled
+        ];
+    }
+    return all_tools;
 }
 
 """Call a tool by name with arguments."""
