@@ -4,6 +4,8 @@ This document provides a summary of new features, improvements, and bug fixes in
 
 ## jaclang 0.13.6 (Unreleased)
 
+- **Fix: Concurrent walker edge loss**: SQLite persistence now uses `BEGIN IMMEDIATE` transactions and delta-based edge merging to prevent concurrent walkers from overwriting each other's edge changes. Added `NodeAnchor.edge_delta()` for computing per-request edge additions/removals.
+
 ## jaclang 0.13.5 (Latest Release)
 
 - **Native: Lambda Expressions and Capturing Closures**: Added lambda expression support in the `na` (native LLVM) codespace. Simple lambdas compile to anonymous LLVM IR functions returned as function pointers. Capturing closures -- lambdas that reference variables from the enclosing scope -- pass captured values as hidden extra parameters, with automatic injection at call sites. No heap allocation required for captures. Leverages the existing indirect function pointer call infrastructure.

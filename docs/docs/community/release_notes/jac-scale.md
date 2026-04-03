@@ -4,6 +4,8 @@ This document provides a summary of new features, improvements, and bug fixes in
 
 ## jac-scale 0.2.14 (Unreleased)
 
+- **Fix: Concurrent walker edge loss**: Concurrent walkers modifying the same node no longer silently lose edges. Edge changes are now merged via deltas instead of full replacement. MongoDB uses atomic aggregation pipelines (`$setUnion`/`$setDifference`); SQLite uses `BEGIN IMMEDIATE` transactions.
+
 ## jac-scale 0.2.13 (Latest Release)
 
 - **jac-mcp included by default**: Added to the default Kubernetes package set in jac-scale.
