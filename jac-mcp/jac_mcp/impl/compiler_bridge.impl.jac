@@ -140,7 +140,14 @@ impl CompilerBridge.typecheck_snippet(
             os.unlink(tmp_path);
         }
     }
+    # First attempt with standard timeout. On cold starts the compiler
+    # bootstraps its own passes (type_checker_pass.jac etc.) which can
+    # exceed the default timeout on slow CI runners. Retry once with a
+    # longer timeout so the bootstrap cost is only paid once per process.
     (success, result) = run_with_timeout(_do_typecheck);
+    if not success {
+        (success, result) = run_with_timeout(_do_typecheck, timeout=60);
+    }
     if not success {
         return {
             "valid": False,
