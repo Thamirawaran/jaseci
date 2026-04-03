@@ -191,6 +191,12 @@ Add to your project's `jac.toml` to customize the server:
 
 ```toml
 [plugins.mcp]
+# Profile: controls how many tools, prompts, and context the server exposes
+# "minimal"  - ~11 tools, 5 prompts, condensed pitfalls (for small models like Haiku)
+# "standard" - ~20 tools, 12 prompts, full pitfalls (for mid-range models like Sonnet)
+# "full"     - 32 tools, 13 prompts, full pitfalls + all resources (for large models like Opus)
+profile = "full"
+
 # Transport settings
 transport = "stdio"          # "stdio", "sse", or "streamable-http"
 port = 3001                  # Port for SSE/HTTP transports
@@ -202,14 +208,43 @@ expose_docs = true           # Expose language documentation
 expose_examples = true       # Expose example Jac projects
 expose_pitfalls = true       # Expose common AI mistakes guide
 
-# Tool enable/disable
+# Tool enable/disable (override profile defaults)
 enable_validate = true       # validate_jac and check_syntax tools
-enable_format = true         # format_jac tool
+enable_format = true         # format_jac and lint_jac tools
 enable_py2jac = true         # py_to_jac conversion tool
 enable_ast = false           # get_ast tool (verbose, off by default)
+enable_transpile = false     # jac_to_py and jac_to_js tools (full profile default)
+enable_cli_tools = false     # list_commands, get_command, execute_command (full profile default)
+enable_project = true        # list_templates, create_project, preview_endpoints
 
 # Project context
 project_root = "."           # Root directory for project-aware tools
+```
+
+### Profiles
+
+Profiles adapt the server's behavior for different model capabilities. The key differences:
+
+| Dimension | `minimal` | `standard` | `full` |
+|---|---|---|---|
+| **Tools** | ~11 (composites) | ~20 | 32 |
+| **Prompts** | 5 | 12 | 13 |
+| **Server instructions** | 3-step workflow | 5-step workflow | 8-step workflow |
+| **Pitfalls in prompts** | Essential top 15 | Full (53 sections) | Full (53 sections) |
+| **Extra resources per prompt** | 0 (inline rules only) | Up to 2 | Unlimited |
+
+**Minimal** collapses overlapping tools into composites (e.g., `fix_error` replaces `validate_jac` + `check_syntax` + `explain_error` + `inspect_validation` in a single call), reducing tool selection confusion for smaller models.
+
+**Standard** provides a balanced set with most v2 tools, suited for models that handle 15-20 tools well.
+
+**Full** exposes everything including CLI tools, transpilation, AST introspection, and the most complex prompt templates.
+
+You can override individual tool flags on any profile:
+
+```toml
+[plugins.mcp]
+profile = "minimal"
+enable_transpile = true   # Re-enable transpile even on minimal
 ```
 
 ## Transport Options
@@ -227,7 +262,7 @@ project_root = "."           # Root directory for project-aware tools
 | SSE | `GET /sse` (event stream), `POST /messages/` (client messages) |
 | Streamable HTTP | `POST /mcp` (bidirectional streaming) |
 
-## Resources (40+)
+## Resources (45+)
 
 Resources are read-only reference materials that AI models can load for context. They are served through the `jac://` URI scheme.
 
@@ -329,253 +364,117 @@ Resources are read-only reference materials that AI models can load for context.
 
 | URI | Description |
 |---|---|
-| `jac://guide/pitfalls` | Common AI mistakes when writing Jac |
+| `jac://guide/pitfalls` | Full common AI mistakes guide (53 sections) |
+| `jac://guide/pitfalls_essential` | Condensed top-15 pitfalls (used by minimal profile) |
 | `jac://guide/patterns` | Idiomatic Jac code patterns |
+| `jac://guide/understand` | Jac & Jaseci knowledge map with resource URIs |
 | `jac://examples/*` | Example Jac projects (auto-discovered) |
 
-## Tools (9)
+## Tools (32)
 
-Tools are executable operations that AI models can invoke to validate, format, and analyze Jac code.
-
-### validate_jac
-
-Full type-check validation of Jac code. Runs the complete compilation pipeline including type checking.
-
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `code` | string | Yes | Jac source code to validate |
-| `filename` | string | No | Filename for error messages (default: `snippet.jac`) |
-
-**Example input:**
-
-```json
-{
-  "code": "obj Foo {\n    has x: int = 5;\n}"
-}
-```
-
-**Example output (valid):**
-
-```json
-{
-  "valid": true,
-  "errors": [],
-  "warnings": []
-}
-```
-
-**Example output (error):**
-
-```json
-{
-  "valid": false,
-  "errors": [
-    {"line": 0, "col": 0, "message": "SyntaxError: unexpected token 'class'"}
-  ],
-  "warnings": []
-}
-```
-
-### check_syntax
-
-Quick parse-only syntax check. Faster than `validate_jac` since it skips type checking.
-
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `code` | string | Yes | Jac source code to check |
-
-### format_jac
-
-Format Jac code according to standard style.
-
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `code` | string | Yes | Jac source code to format |
-
-**Example output:**
-
-```json
-{
-  "formatted": "obj Foo {\n    has x: int = 5;\n}\n",
-  "changed": true
-}
-```
-
-### py_to_jac
-
-Convert Python code to Jac.
-
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `python_code` | string | Yes | Python source code to convert |
-
-**Example output:**
-
-```json
-{
-  "jac_code": "can greet(name: str) -> str {\n    return f\"Hello, {name}!\";\n}\n",
-  "warnings": []
-}
-```
-
-### explain_error
-
-Explain a Jac compiler error with suggestions and code examples.
-
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `error_message` | string | Yes | The error message to explain |
-
-**Example output:**
-
-```json
-{
-  "title": "Syntax Error",
-  "explanation": "The code contains a syntax error. Common causes: missing semicolons, missing braces, or using Python syntax instead of Jac syntax.",
-  "suggestion": "Review the error and apply the pattern shown in the example.",
-  "example": "obj Foo {\n    has x: int = 5;\n}",
-  "docs_uri": "jac://guide/pitfalls"
-}
-```
-
-### list_examples
-
-List available Jac example categories.
-
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `category` | string | No | Optional category filter |
-
-### get_example
-
-Get all `.jac` files from an example category.
-
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `name` | string | Yes | Example category name |
-
-### search_docs
-
-Keyword search across all documentation resources. Returns ranked snippets.
-
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `query` | string | Yes | Search query keywords |
-| `limit` | integer | No | Maximum results (default: `5`) |
-
-**Example output:**
-
-```json
-{
-  "results": [
-    {
-      "uri": "jac://docs/osp",
-      "title": "Object-Spatial Programming",
-      "description": "Object-Spatial Programming - Nodes, edges, walkers",
-      "snippet": "...walkers traverse the graph by visiting connected nodes...",
-      "score": 12.0
-    }
-  ]
-}
-```
-
-### get_ast
-
-Parse Jac code and return AST information.
-
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `code` | string | Yes | Jac source code to parse |
-| `format` | string | No | Output format: `tree` or `json` (default: `tree`) |
+Tools are executable operations that AI models can invoke. They are organized by category. Availability depends on the active [profile](#profiles).
 
 !!! note "Safety limits"
     All compiler tools enforce a **100 KB** maximum input size and a **10-second** timeout per operation.
 
-## Prompts (9)
+### Compilation & Validation
 
-Prompt templates provide structured system prompts for common Jac development tasks. Each prompt automatically loads the pitfalls guide and relevant reference material as context.
-
-### write_module
-
-Generate a new Jac module with optional `.impl.jac` file.
-
-| Argument | Required | Description |
+| Tool | Description | Profile |
 |---|---|---|
-| `name` | Yes | Module name |
-| `purpose` | Yes | What the module does |
-| `has_impl` | No | Include `.impl.jac` file (`true`/`false`, default: `true`) |
+| `validate_jac` | Full type-check validation. Returns structured errors and warnings | standard, full |
+| `check_syntax` | Parse-only syntax check (faster, no type checking) | full |
+| `format_jac` | Format Jac code to standard style | all |
+| `lint_jac` | Lint for style violations and unused symbols. Supports `auto_fix` | standard, full |
+| `explain_error` | Explain a compiler error with category, root cause, and fix example | full |
+| `fix_error` | Validate + explain all errors in one call. Recommended for smaller models | all |
+| `inspect_validation` | Group errors by category with root-cause analysis | full |
 
-### write_impl
+### Code Transformation
 
-Generate a `.impl.jac` implementation file for existing declarations.
-
-| Argument | Required | Description |
+| Tool | Description | Profile |
 |---|---|---|
-| `declarations` | Yes | Content of the `.jac` declaration file |
+| `py_to_jac` | Transpile Python code to Jac | standard, full |
+| `jac_to_py` | Transpile Jac code to Python | full |
+| `jac_to_js` | Transpile Jac code to JavaScript (for `.cl.jac` files) | full |
+| `get_ast` | Parse Jac code and return AST as tree or JSON | full |
 
-### write_walker
+### Execution & Visualization
 
-Generate a walker with visit logic.
-
-| Argument | Required | Description |
+| Tool | Description | Profile |
 |---|---|---|
-| `name` | Yes | Walker name |
-| `purpose` | Yes | What the walker does |
-| `node_types` | Yes | Node types to traverse |
+| `run_jac` | Execute Jac code and return stdout/stderr | all |
+| `graph_visualize` | Run Jac code and visualize the graph as DOT or JSON | standard, full |
 
-### write_node
+### Documentation & Examples
 
-Generate a node archetype with has declarations.
-
-| Argument | Required | Description |
+| Tool | Description | Profile |
 |---|---|---|
-| `name` | Yes | Node name |
-| `fields` | Yes | Field definitions |
+| `get_doc_section` | Get a specific section from a doc by heading match (lightweight) | all |
+| `get_resource` | Fetch a full doc resource by URI | standard, full |
+| `search_docs` | Keyword search across docs, returns ranked snippets | standard, full |
+| `get_example_file` | Get a single `.jac` file from an example category (lightweight) | all |
+| `list_example_files` | List `.jac` files in an example category with sizes | standard, full |
+| `list_examples` | List all example categories with descriptions | full |
+| `get_example` | Get all `.jac` files from an example category | full |
 
-### write_test
+### Workflow & Guidance
 
-Generate test blocks for a module.
-
-| Argument | Required | Description |
+| Tool | Description | Profile |
 |---|---|---|
-| `module_name` | Yes | Module to test |
-| `functions_to_test` | Yes | Functions/abilities to test |
+| `recommend_workflow` | Given a task, recommend resources, tools, and steps | all |
+| `recommend_docs` | Given a task, recommend 2-5 most relevant doc resources | standard, full |
+| `find_example` | Given a task, find the most relevant examples | all |
+| `understand_jac_and_jaseci` | Get the Jac & Jaseci knowledge map with resource URIs | full |
 
-### write_ability
+### Project & Testing
 
-Generate an ability (method) implementation.
-
-| Argument | Required | Description |
+| Tool | Description | Profile |
 |---|---|---|
-| `name` | Yes | Ability name |
-| `signature` | Yes | Type signature |
-| `purpose` | Yes | What it does |
+| `inspect_project` | Analyze project directory: files, entry points, walkers, endpoints | all |
+| `run_tests` | Run Jac tests and return pass/fail results | all |
+| `create_project` | Create a new Jac project from a template | all |
+| `list_templates` | List available project templates | standard, full |
+| `preview_endpoints` | Preview HTTP endpoints a `.jac` file would expose | all |
 
-### debug_error
+### CLI Tools
 
-Debug a Jac compilation error.
-
-| Argument | Required | Description |
+| Tool | Description | Profile |
 |---|---|---|
-| `error_output` | Yes | The error message(s) |
-| `code` | Yes | The code that caused the error |
+| `list_commands` | List all `jac` CLI commands including plugin-provided ones | full |
+| `get_command` | Get full argument details for a specific CLI command | full |
+| `execute_command` | Execute a `jac` CLI command with arguments | full |
 
-### fix_type_error
+## Prompts (13)
 
-Fix a type checking error in Jac code.
+Prompt templates provide structured system prompts for common Jac development tasks. Each prompt automatically loads the pitfalls guide and relevant reference material as context. The amount of context loaded adapts to the active [profile](#profiles).
 
-| Argument | Required | Description |
+### Core Prompts (all profiles)
+
+| Prompt | Description | Key Arguments |
 |---|---|---|
-| `error_output` | Yes | The type error message |
-| `code` | Yes | The code with the type error |
+| `write_module` | Generate a Jac module with optional `.impl.jac` | `name`, `purpose`, `has_impl` |
+| `write_walker` | Generate a walker with visit logic | `name`, `purpose`, `node_types` |
+| `debug_error` | Debug a Jac compilation error | `error_output`, `code` |
+| `write_client_component` | Generate a `cl {}` component with reactive state and JSX | `name`, `purpose`, `props` |
+| `write_walker_endpoint` | Generate a `walker:pub` or `walker:priv` HTTP endpoint | `name`, `purpose`, `visibility`, `fields` |
 
-### migrate_python
+### Standard & Full Prompts
 
-Convert Python code to idiomatic Jac.
-
-| Argument | Required | Description |
+| Prompt | Description | Key Arguments |
 |---|---|---|
-| `python_code` | Yes | Python source code to convert |
+| `write_impl` | Generate `.impl.jac` for existing declarations | `declarations` |
+| `write_node` | Generate a node archetype with `has` declarations | `name`, `fields` |
+| `write_test` | Generate test blocks for a module | `module_name`, `functions_to_test` |
+| `write_ability` | Generate an ability (method) implementation | `name`, `signature`, `purpose` |
+| `fix_type_error` | Fix a type checking error | `error_output`, `code` |
+| `migrate_python` | Convert Python code to idiomatic Jac | `python_code` |
+| `write_auth_flow` | Generate login/signup/logout pages with built-in auth | `pages`, `redirect_to` |
+
+### Full Profile Only
+
+| Prompt | Description | Key Arguments |
+|---|---|---|
+| `write_fullstack_feature` | Generate coordinated server walkers + client UI | `name`, `purpose`, `data_model`, `operations` |
 
 ## Troubleshooting
 

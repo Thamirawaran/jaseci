@@ -2,9 +2,59 @@
 
 ## jac-mcp 0.1.9 (Unreleased)
 
-- 1 small refactor/change.
-- **Knowledge map tools**: `understand_jac_and_jaseci` and `get_resource` tools for on-demand doc fetching with size-tagged URIs, expanded fullstack coverage, enum-validated example categories, and leaner tool/server descriptions.
-- **Client-side and full-stack pitfalls**: Added new pitfalls documentation covering client-side `.cl.jac` and full-stack gotchas.
+### Profile-aware model support
+
+The server now adapts its behavior based on a `profile` setting in `jac.toml`, making it effective across model sizes:
+
+- **`minimal` profile (~11 tools, 5 prompts)**: Designed for small models (Haiku, etc.). Collapses overlapping tools into composites (e.g., `fix_error` replaces 5 separate validation tools), uses a condensed top-15 pitfalls guide, and sends a simplified 3-step workflow in server instructions.
+- **`standard` profile (~20 tools, 12 prompts)**: Balanced set for mid-range models (Sonnet, GPT-4o). Full pitfalls guide, capped resource loading (max 2 per prompt), 5-step workflow.
+- **`full` profile (32 tools, 13 prompts)**: All tools and prompts for large models (Opus). Unchanged from previous behavior. Remains the default.
+
+Configure with a single line:
+
+```toml
+[plugins.mcp]
+profile = "minimal"    # or "standard" or "full"
+```
+
+Individual tool flags (`enable_transpile`, `enable_cli_tools`, `enable_project`) can override profile defaults.
+
+### New tools (v2)
+
+- **Targeted retrieval**: `get_doc_section` (section by heading match), `get_example_file` (single file), `list_example_files` (file listing with sizes) - lighter alternatives to full-document fetching
+- **Workflow guidance**: `recommend_workflow` (task-aware steps/resources), `recommend_docs` (doc recommendations), `find_example` (example matching)
+- **Composite validation**: `fix_error` (validate + explain in one call), `inspect_validation` (errors grouped by root cause)
+- **Project tools**: `create_project` (scaffold from template), `list_templates`, `preview_endpoints` (analyze HTTP endpoints without starting server), `inspect_project` (file inventory, walkers, endpoints)
+- **Knowledge map**: `understand_jac_and_jaseci` - orientation guide with resource URIs
+
+### New prompts (v2)
+
+- `write_client_component`: Generate `cl {}` components with reactive state and JSX
+- `write_walker_endpoint`: Generate `walker:pub` or `walker:priv` HTTP endpoints
+- `write_auth_flow`: Generate login/signup pages with built-in auth functions
+- `write_fullstack_feature`: Generate coordinated server walkers + client UI
+
+### Session caching
+
+- Resource content (`read_resource`) is now cached per session - repeated reads of pitfalls, docs, or examples skip disk/network I/O
+- GitHub API responses are cached per session - browsing examples no longer makes redundant API calls
+
+### Expanded pitfalls guide
+
+- Added 10 new battle-tested pitfalls (sections 44-53) from real-world devkit applications: `root` vs `root()` in client code, `sv import` same-file walkers, `getattr` for `.reports`, `dict()`/`list()` casting in client code, `sv import` for types, null API response guards, Python string methods in JS, JSX component hooks, Router `basename`, computed dict keys
+- New `pitfalls_essential.md` - condensed top-15 guide used by minimal profile
+
+### Config schema
+
+- Added missing `enable_transpile`, `enable_cli_tools`, `enable_project` options to `[plugins.mcp]` config schema
+- All config options are now discoverable and documented
+
+### Documentation
+
+- Updated MCP docs with all 32 tools (organized by category with profile availability)
+- Updated prompts documentation (13 prompts, grouped by profile tier)
+- Added profiles section with comparison table
+- Added new guide resources (`pitfalls_essential`, `understand`)
 
 ## jac-mcp 0.1.8 (Latest Release)
 
