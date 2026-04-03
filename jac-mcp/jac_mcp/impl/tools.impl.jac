@@ -510,6 +510,39 @@ impl ToolProvider.list_tools -> list[dict[str, Any]] {
                 "required": ["code"]
             }
         },
+        {
+            "name": "inspect_project",
+            "description": "Analyze a Jac project directory. Returns file inventory classified by type (.jac, .cl.jac, .impl.jac, .test.jac), entry points, walker declarations, and public endpoints.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "project_root": {
+                        "type": "string",
+                        "description": "Path to the project directory (default: current directory)",
+                        "default": "."
+                    }
+                }
+            }
+        },
+        {
+            "name": "run_tests",
+            "description": "Run Jac tests in a project directory. Returns pass/fail counts and individual test results.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Path to test file or directory (default: current directory)",
+                        "default": "."
+                    },
+                    "timeout": {
+                        "type": "integer",
+                        "description": "Max execution time in seconds",
+                        "default": 60
+                    }
+                }
+            }
+        },
 
     ];
 
@@ -751,6 +784,13 @@ impl ToolProvider.call_tool(name: str, arguments: dict[str, Any]) -> dict[str, A
                 return {"error": "Missing required argument: code"};
             }
             return inspect_validation(code);
+        } elif name == "inspect_project" {
+            project_root = arguments.get("project_root", ".");
+            return inspect_project(project_root);
+        } elif name == "run_tests" {
+            path = arguments.get("path", ".");
+            timeout = arguments.get("timeout", 60);
+            return run_tests(path, timeout);
         } else {
             return {"error": f"Unknown tool: {name}"};
         }
@@ -1858,5 +1898,216 @@ impl inspect_validation(code: str) -> dict[str, Any] {
         "groups": sorted_groups,
         "root_cause": root_cause,
         "warnings": validation.get("warnings", [])
+    };
+}
+
+"""Analyze a Jac project directory structure."""
+impl inspect_project(project_root: str = ".") -> dict[str, Any] {
+    import from pathlib { Path }
+    root = Path(project_root).resolve();
+    if not root.exists() {
+        return {"error": f"Directory not found: {project_root}"};
+    }
+    if not root.is_dir() {
+        return {"error": f"Not a directory: {project_root}"};
+    }
+
+    # Classify files
+    server_files: list[str] = [];
+    client_files: list[str] = [];
+    impl_files: list[str] = [];
+    test_files: list[str] = [];
+    other_jac: list[str] = [];
+
+    for jac_file in sorted(root.rglob("*.jac")) {
+        # Skip hidden dirs and common non-project dirs
+        rel = str(jac_file.relative_to(root));
+        if "/.git/" in f"/{rel}"
+        or "/__pycache__/" in f"/{rel}"
+        or "/.jac/" in f"/{rel}" {
+            continue;
+        }
+        name = jac_file.name;
+        if name.endswith(".cl.jac") {
+            client_files.append(rel);
+        } elif name.endswith(".impl.jac") {
+            impl_files.append(rel);
+        } elif name.endswith(".test.jac") {
+            test_files.append(rel);
+        } elif name.endswith(".sv.jac") {
+            server_files.append(rel);
+        } else {
+            # Regular .jac — scan for markers
+            server_files.append(rel);
+        }
+    }
+
+    # Scan for entry points, walkers, and public endpoints
+    entry_points: list[str] = [];
+    walkers: list[dict[str, str]] = [];
+    public_endpoints: list[dict[str, str]] = [];
+
+    for rel in server_files {
+        full = root / rel;
+        try {
+            content = full.read_text();
+        } except Exception {
+            continue;
+        }
+        # Entry points
+        if "with entry" in content {
+            entry_points.append(rel);
+        }
+        # Walker declarations
+        for line in content.split("\n") {
+            stripped = line.strip();
+            if stripped.startswith("walker:pub ")
+            or stripped.startswith("walker:priv ") {
+                walker_name = stripped.split("{")[0].strip()
+                    if "{" in stripped
+                    else stripped.rstrip(";").strip();
+                visibility = "pub" if ":pub" in stripped else "priv";
+                walkers.append(
+                    {"name": walker_name, "file": rel, "visibility": visibility}
+                );
+                if visibility == "pub" {
+                    public_endpoints.append(
+                        {"type": "walker", "name": walker_name, "file": rel}
+                    );
+                }
+            } elif stripped.startswith("walker ")
+            and not stripped.startswith("walker:") {
+                walker_name = stripped.split("{")[0].strip()
+                    if "{" in stripped
+                    else stripped.rstrip(";").strip();
+                walkers.append(
+                    {"name": walker_name, "file": rel, "visibility": "internal"}
+                );
+            }
+            # Public function endpoints
+            if stripped.startswith("def:pub ") or stripped.startswith("def:priv ") {
+                func_sig = stripped.split("{")[0].strip()
+                    if "{" in stripped
+                    else stripped.rstrip(";").strip();
+                if ":pub" in stripped {
+                    public_endpoints.append(
+                        {"type": "function", "name": func_sig, "file": rel}
+                    );
+                }
+            }
+        }
+    }
+
+    # Check for pages/ directory (file-based routing)
+    pages_dir = root / "pages";
+    routes: list[str] = [];
+    if pages_dir.exists() {
+        for page_file in sorted(pages_dir.rglob("*.jac")) {
+            routes.append(str(page_file.relative_to(root)));
+        }
+    }
+
+    # Check for jac.toml
+    has_config = (root / "jac.toml").exists();
+
+    return {
+        "project_root": str(root),
+        "files": {
+            "server": server_files,
+            "client": client_files,
+            "impl": impl_files,
+            "test": test_files
+        },
+        "file_counts": {
+            "server": len(server_files),
+            "client": len(client_files),
+            "impl": len(impl_files),
+            "test": len(test_files),
+            "total": len(server_files) + len(client_files) + len(impl_files) + len(
+                test_files
+            )
+        },
+        "entry_points": entry_points,
+        "walkers": walkers,
+        "public_endpoints": public_endpoints,
+        "routes": routes,
+        "has_config": has_config
+    };
+}
+
+"""Run Jac tests and return structured results."""
+impl run_tests(path: str = ".", timeout: int = 60) -> dict[str, Any] {
+    import subprocess;
+    import sys;
+    import from pathlib { Path }
+
+    test_path = Path(path).resolve();
+    if not test_path.exists() {
+        return {"error": f"Path not found: {path}"};
+    }
+
+    # Build command
+    cmd_args: list[str] = [sys.executable, "-m", "jaclang", "test"];
+    if test_path.is_file() {
+        cmd_args.append(str(test_path));
+    } else {
+        cmd_args.append(str(test_path));
+    }
+
+    try {
+        result = subprocess.run(
+            cmd_args,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=str(test_path.parent if test_path.is_file() else test_path)
+        );
+    } except subprocess.TimeoutExpired {
+        return {
+            "success": False,
+            "error": f"Tests timed out after {timeout}s",
+            "command": f"jac test {path}"
+        };
+    } except Exception as e {
+        return {
+            "success": False,
+            "error": f"Failed to run tests: {str(e)}",
+            "command": f"jac test {path}"
+        };
+    }
+
+    # Parse output for test results
+    stdout = result.stdout;
+    stderr = result.stderr;
+    passed = 0;
+    failed = 0;
+    test_results: list[dict[str, str]] = [];
+
+    for line in stdout.split("\n") {
+        stripped = line.strip();
+        if stripped.startswith("+ ") or "PASS" in stripped.upper() {
+            passed += 1;
+            test_results.append(
+                {"status": "pass", "name": stripped.lstrip("+ ").strip()}
+            );
+        } elif stripped.startswith("X ")
+        or ("FAIL" in stripped.upper() and "=" not in stripped) {
+            failed += 1;
+            test_results.append(
+                {"status": "fail", "name": stripped.lstrip("X ").strip()}
+            );
+        }
+    }
+
+    return {
+        "success": result.returncode == 0,
+        "exit_code": result.returncode,
+        "passed": passed,
+        "failed": failed,
+        "total": passed + failed,
+        "tests": test_results,
+        "stdout": stdout,
+        "stderr": stderr,
+        "command": f"jac test {path}"
     };
 }

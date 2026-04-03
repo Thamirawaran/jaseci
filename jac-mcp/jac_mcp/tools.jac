@@ -92,3 +92,9 @@ def fix_error(code: str) -> dict[str, Any];
 
 """Validate code and return errors grouped by category with root cause ordering."""
 def inspect_validation(code: str) -> dict[str, Any];
+
+"""Analyze a Jac project directory structure."""
+def inspect_project(project_root: str = ".") -> dict[str, Any];
+
+"""Run Jac tests and return structured results."""
+def run_tests(path: str = ".", timeout: int = 60) -> dict[str, Any];
