@@ -390,6 +390,56 @@ impl ToolProvider.list_tools -> list[dict[str, Any]] {
                 "required": ["filename"]
             }
         },
+        {
+            "name": "list_example_files",
+            "description": "List .jac files in an example category with sizes. Call before get_example_file to see what's available.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "category": {
+                        "type": "string",
+                        "description": "Example category name (e.g. 'data_spatial', 'littleX')"
+                    }
+                },
+                "required": ["category"]
+            }
+        },
+        {
+            "name": "get_example_file",
+            "description": "Get a single .jac file from an example category. Much lighter than get_example which returns all files.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "category": {
+                        "type": "string",
+                        "description": "Example category name (e.g. 'data_spatial')"
+                    },
+                    "file_path": {
+                        "type": "string",
+                        "description": "Relative path of the file within the category (from list_example_files)"
+                    }
+                },
+                "required": ["category", "file_path"]
+            }
+        },
+        {
+            "name": "get_doc_section",
+            "description": "Get a specific section from a doc resource by heading match. Much lighter than get_resource which returns the full document.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "uri": {
+                        "type": "string",
+                        "description": "Resource URI (e.g. 'jac://docs/osp', 'jac://docs/foundation')"
+                    },
+                    "section": {
+                        "type": "string",
+                        "description": "Section heading or keyword to match (e.g. 'walker', 'graph construction', 'import')"
+                    }
+                },
+                "required": ["uri", "section"]
+            }
+        },
 
     ];
 
@@ -581,6 +631,26 @@ impl ToolProvider.call_tool(name: str, arguments: dict[str, Any]) -> dict[str, A
             }
             port = arguments.get("port", 8000);
             return CompilerBridge.start_server(filename, port, faux=True);
+        } elif name == "list_example_files" {
+            category = arguments.get("category", "");
+            if not category {
+                return {"error": "Missing required argument: category"};
+            }
+            return list_example_files(category);
+        } elif name == "get_example_file" {
+            category = arguments.get("category", "");
+            file_path = arguments.get("file_path", "");
+            if not category or not file_path {
+                return {"error": "Missing required arguments: category and file_path"};
+            }
+            return get_example_file(category, file_path);
+        } elif name == "get_doc_section" {
+            uri = arguments.get("uri", "");
+            section = arguments.get("section", "");
+            if not uri or not section {
+                return {"error": "Missing required arguments: uri and section"};
+            }
+            return get_doc_section(uri, section);
         } else {
             return {"error": f"Unknown tool: {name}"};
         }
@@ -1000,4 +1070,180 @@ impl get_resource(uri: str) -> dict[str, Any] {
         return {"error": content, "uri": uri};
     }
     return {"uri": uri, "content": content};
+}
+
+"""List .jac files in an example category with sizes."""
+impl list_example_files(category: str) -> dict[str, Any] {
+    import from jac_mcp.resources { ResourceProvider, find_repo_root }
+    import from pathlib { Path }
+
+    # Try local repo first
+    repo_root = find_repo_root();
+    if repo_root {
+        examples_dir = Path(repo_root) / "jac" / "examples" / category;
+        if examples_dir.exists() and examples_dir.is_dir() {
+            files: list[dict[str, Any]] = [];
+            for jac_file in sorted(examples_dir.rglob("*.jac")) {
+                rel = str(jac_file.relative_to(examples_dir));
+                try {
+                    line_count = len(jac_file.read_text().splitlines());
+                } except Exception {
+                    line_count = 0;
+                }
+                files.append({"file": rel, "lines": line_count});
+            }
+            if not files {
+                return {"error": f"No .jac files found in category '{category}'"};
+            }
+            return {"category": category, "files": files};
+        }
+    }
+    # Fall back: use ResourceProvider to list the category, then parse file names
+    import from jac_mcp.resources { ResourceProvider }
+    rp = ResourceProvider();
+    rp.index_resources();
+    content = rp.read_resource(f"jac://examples/{category}");
+    if content.startswith("Error:") or content.startswith("No .jac") {
+        return {"error": f"Category '{category}' not found"};
+    }
+    # Parse concatenated output format: "--- filename ---\n<content>\n\n--- filename2 ---\n..."
+    files: list[dict[str, Any]] = [];
+    for block in content.split("\n--- ") {
+        if not block.strip() {
+            continue;
+        }
+        header = block.split(" ---")[0].strip().lstrip("-").strip();
+        if header {
+            line_count = len(block.split("\n")) - 1;
+            files.append({"file": header, "lines": line_count});
+        }
+    }
+    return {"category": category, "files": files};
+}
+
+"""Get a single .jac file from an example category."""
+impl get_example_file(category: str, file_path: str) -> dict[str, Any] {
+    import from jac_mcp.resources { find_repo_root }
+    import from pathlib { Path }
+
+    # Try local repo first
+    repo_root = find_repo_root();
+    if repo_root {
+        full_path = Path(repo_root) / "jac" / "examples" / category / file_path;
+        if full_path.exists() and full_path.is_file() {
+            try {
+                content = full_path.read_text();
+                return {"category": category, "file": file_path, "content": content};
+            } except Exception as e {
+                return {"error": f"Failed to read file: {e}"};
+            }
+        }
+    }
+    # Fall back: use ResourceProvider to get the full category, then extract the file
+    import from jac_mcp.resources { ResourceProvider }
+    rp = ResourceProvider();
+    rp.index_resources();
+    content = rp.read_resource(f"jac://examples/{category}");
+    if content.startswith("Error:") or content.startswith("No .jac") {
+        return {"error": f"Category '{category}' not found"};
+    }
+    # Parse concatenated output to find the specific file
+    marker = f"--- {file_path} ---";
+    idx = content.find(marker);
+    if idx < 0 {
+        return {"error": f"File '{file_path}' not found in category '{category}'"};
+    }
+    # Extract content between this marker and the next one
+    start = idx + len(marker) + 1;
+    next_marker = content.find("\n--- ", start);
+    if next_marker > 0 {
+        file_content = content[start:next_marker].strip();
+    } else {
+        file_content = content[start:].strip();
+    }
+    return {"category": category, "file": file_path, "content": file_content};
+}
+
+"""Get a specific section from a doc resource by heading match."""
+impl get_doc_section(uri: str, section: str) -> dict[str, Any] {
+    import from jac_mcp.resources { ResourceProvider }
+    rp = ResourceProvider();
+    rp.index_resources();
+    content = rp.read_resource(uri);
+    if content.startswith("Error:") {
+        return {"error": content, "uri": uri};
+    }
+
+    # Split content into top-level sections by ## headings
+    # Each section includes all its ### subsections
+    lines = content.split("\n");
+    sections: list[dict[str, str]] = [];
+    current_heading = "";
+    current_lines: list[str] = [];
+
+    for line in lines {
+        if line.startswith("## ") and not line.startswith("### ") {
+            # Save previous section
+            if current_heading {
+                sections.append(
+                    {"heading": current_heading, "content": "\n".join(current_lines)}
+                );
+            }
+            current_heading = line.lstrip("#").strip();
+            current_lines = [line];
+        } else {
+            current_lines.append(line);
+        }
+    }
+    # Save last section
+    if current_heading {
+        sections.append(
+            {"heading": current_heading, "content": "\n".join(current_lines)}
+        );
+    }
+
+    if not sections {
+        return {
+            "uri": uri,
+            "section": section,
+            "content": content,
+            "note": "No sections found, returning full content"
+        };
+    }
+
+    # Find best matching section(s) by keyword
+    query = section.lower();
+    matches: list[dict[str, str]] = [];
+    for sec in sections {
+        heading_lower = sec["heading"].lower();
+        if query in heading_lower {
+            matches.append(sec);
+        }
+    }
+    # If no heading match, try content match
+    if not matches {
+        for sec in sections {
+            if query in sec["content"].lower()[:500] {
+                matches.append(sec);
+            }
+        }
+    }
+
+    if not matches {
+        headings = [s["heading"] for s in sections];
+        return {
+            "uri": uri,
+            "section": section,
+            "error": "No matching section found",
+            "available_sections": headings
+        };
+    }
+
+    best = matches[0];
+    return {
+        "uri": uri,
+        "section": best["heading"],
+        "content": best["content"],
+        "total_matches": len(matches)
+    };
 }

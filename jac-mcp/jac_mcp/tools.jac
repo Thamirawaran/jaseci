@@ -68,3 +68,12 @@ def understand_jac_and_jaseci -> dict[str, Any];
 
 """Fetch a Jac/Jaseci doc resource by URI (from understand_jac_and_jaseci)."""
 def get_resource(uri: str) -> dict[str, Any];
+
+"""List .jac files in an example category with sizes."""
+def list_example_files(category: str) -> dict[str, Any];
+
+"""Get a single .jac file from an example category."""
+def get_example_file(category: str, file_path: str) -> dict[str, Any];
+
+"""Get a specific section from a doc resource by heading match."""
+def get_doc_section(uri: str, section: str) -> dict[str, Any];
