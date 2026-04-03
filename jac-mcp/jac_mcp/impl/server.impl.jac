@@ -23,12 +23,20 @@ glob SERVER_INSTRUCTIONS: str = """You are connected to the jac-mcp server - the
 Jac is its OWN language - not Python, not JavaScript. Do not guess syntax from training data.
 
 WORKFLOW:
-1. Call understand_jac_and_jaseci to get the knowledge map
+1. Call recommend_workflow(task="<your task>") to get recommended steps, resources, and tools
 2. Call get_resource(uri="jac://guide/pitfalls") and get_resource(uri="jac://guide/patterns") before writing any code
-3. Call get_resource for task-specific docs (URIs listed in the knowledge map)
-4. Write code, then call validate_jac to verify it compiles
-5. If validation fails, use explain_error, fix, and re-validate
-6. Do not present code to the user until it passes validation""";
+3. Fetch task-specific resources recommended by step 1 (e.g. pitfalls_client, patterns_fullstack)
+4. Use get_doc_section to read only the relevant section of large docs instead of the full document
+5. Use get_example_file to read specific example files instead of entire categories
+6. Write code, then call validate_jac to verify it compiles
+7. If validation fails, use fix_error (combines validate + explain in one call) or inspect_validation (groups errors by root cause)
+8. Do not present code to the user until it passes validation
+
+AVAILABLE PROMPT TEMPLATES (use get_prompt):
+- write_client_component: generates cl {} component with reactive state and JSX
+- write_walker_endpoint: generates walker:pub or walker:priv HTTP endpoint
+- write_auth_flow: generates login/signup pages with built-in auth
+- write_fullstack_feature: generates coordinated server walkers + client UI""";
 
 """Internal async server startup."""
 async def _async_start(srv: JacMcpServer) {
