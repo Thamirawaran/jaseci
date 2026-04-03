@@ -330,6 +330,54 @@ impl ToolProvider.list_tools -> list[dict[str, Any]] {
                 "required": ["uri"]
             }
         },
+        {
+            "name": "list_templates",
+            "description": "List available Jac project templates for scaffolding new projects.",
+            "inputSchema": {"type": "object", "properties": {}}
+        },
+        {
+            "name": "create_project",
+            "description": "Create a new Jac project from a template. Returns project path and files created.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Project name (used as directory name)"
+                    },
+                    "template": {
+                        "type": "string",
+                        "description": "Template to use (call list_templates to see options)",
+                        "default": "default"
+                    },
+                    "directory": {
+                        "type": "string",
+                        "description": "Parent directory to create project in (default: current directory)",
+                        "default": ""
+                    }
+                },
+                "required": ["name"]
+            }
+        },
+        {
+            "name": "preview_endpoints",
+            "description": "Preview HTTP endpoints a Jac file would expose without starting a server. Shows walker:pub and def:pub routes.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "filename": {
+                        "type": "string",
+                        "description": "Path to the .jac file to analyze"
+                    },
+                    "port": {
+                        "type": "integer",
+                        "description": "Port for endpoint URLs (default: 8000)",
+                        "default": 8000
+                    }
+                },
+                "required": ["filename"]
+            }
+        },
 
     ];
 }
@@ -454,6 +502,23 @@ impl ToolProvider.call_tool(name: str, arguments: dict[str, Any]) -> dict[str, A
                 return {"error": "Missing required argument: uri"};
             }
             return get_resource(uri);
+        } elif name == "list_templates" {
+            return CompilerBridge.list_templates();
+        } elif name == "create_project" {
+            proj_name = arguments.get("name", "");
+            if not proj_name {
+                return {"error": "Missing required argument: name"};
+            }
+            template = arguments.get("template", "default");
+            directory = arguments.get("directory", "");
+            return CompilerBridge.create_project(proj_name, template, directory);
+        } elif name == "preview_endpoints" {
+            filename = arguments.get("filename", "");
+            if not filename {
+                return {"error": "Missing required argument: filename"};
+            }
+            port = arguments.get("port", 8000);
+            return CompilerBridge.start_server(filename, port, faux=True);
         } else {
             return {"error": f"Unknown tool: {name}"};
         }
