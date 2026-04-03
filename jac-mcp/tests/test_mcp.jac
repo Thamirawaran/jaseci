@@ -331,20 +331,20 @@ test "parse valid code" {
     assert isinstance(result, dict);
     assert "valid" in result;
     assert "errors" in result;
-    assert result["valid"] == True;
+    assert result["valid"];
     assert len(result["errors"]) == 0;
 }
 
 test "parse invalid code" {
     result = CompilerBridge.parse_snippet("this is not valid @@@ !!!");
     assert isinstance(result, dict);
-    assert result["valid"] == False;
+    assert not result["valid"];
     assert len(result["errors"]) > 0;
 }
 
 test "parse errors have correct line and col" {
     result = CompilerBridge.parse_snippet("obj Foo {\n    has x: int = 5\n}");
-    assert result["valid"] == False;
+    assert not result["valid"];
     assert len(result["errors"]) > 0;
     err = result["errors"][0];
     assert err["line"] > 0 , f"Expected line > 0, got {err['line']}";
@@ -363,7 +363,7 @@ test "parse empty code" {
 test "input size limit" {
     large_input = "x = 1;\n" * 20000;
     result = CompilerBridge.parse_snippet(large_input);
-    assert result["valid"] == False;
+    assert not result["valid"];
     assert len(result["errors"]) > 0;
     assert "size" in result["errors"][0]["message"].lower();
 }
@@ -1000,4 +1000,251 @@ test "get resource fetches valid URIs and rejects invalid ones" {
     assert "error" in bad;
     empty = tp.call_tool("get_resource", {});
     assert "error" in empty;
+}
+
+# ── v2 Tool Tests ──
+test "v2 tool names registered" {
+    tp = ToolProvider();
+    tools = tp.list_tools();
+    names = [t["name"] for t in tools];
+    # Phase 1: surfaced bridge methods
+    assert "list_templates" in names;
+    assert "create_project" in names;
+    assert "preview_endpoints" in names;
+    # Phase 2: targeted retrieval
+    assert "list_example_files" in names;
+    assert "get_example_file" in names;
+    assert "get_doc_section" in names;
+    # Phase 3: guidance
+    assert "recommend_workflow" in names;
+    assert "recommend_docs" in names;
+    assert "find_example" in names;
+    # Phase 4: composite
+    assert "fix_error" in names;
+    assert "inspect_validation" in names;
+    # Phase 5: project
+    assert "inspect_project" in names;
+    assert "run_tests" in names;
+}
+
+test "list_templates returns templates" {
+    tp = ToolProvider();
+    result = tp.call_tool("list_templates", {});
+    assert "templates" in result;
+    templates = result["templates"];
+    assert len(templates) > 0;
+    names = [t["name"] for t in templates];
+    assert "default" in names;
+}
+
+test "list_example_files returns files" {
+    tp = ToolProvider();
+    result = tp.call_tool("list_example_files", {"category": "data_spatial"});
+    assert "files" in result;
+    assert len(result["files"]) > 0;
+    first = result["files"][0];
+    assert "file" in first;
+    assert "lines" in first;
+}
+
+test "list_example_files bad category" {
+    tp = ToolProvider();
+    result = tp.call_tool("list_example_files", {"category": "nonexistent_xyz"});
+    assert "error" in result;
+}
+
+test "get_example_file returns content" {
+    tp = ToolProvider();
+    result = tp.call_tool(
+        "get_example_file",
+        {"category": "data_spatial", "file_path": "create_node.jac"}
+    );
+    assert "content" in result;
+    assert len(result["content"]) > 0;
+    assert result["category"] == "data_spatial";
+}
+
+test "get_example_file bad file" {
+    tp = ToolProvider();
+    result = tp.call_tool(
+        "get_example_file",
+        {"category": "data_spatial", "file_path": "nonexistent.jac"}
+    );
+    assert "error" in result;
+}
+
+test "get_doc_section returns section" {
+    tp = ToolProvider();
+    result = tp.call_tool(
+        "get_doc_section", {"uri": "jac://docs/osp", "section": "walker"}
+    );
+    assert "content" in result;
+    assert "Walkers" in result.get("section", "");
+    assert len(result["content"]) > 50;
+}
+
+test "get_doc_section no match returns headings" {
+    tp = ToolProvider();
+    result = tp.call_tool(
+        "get_doc_section", {"uri": "jac://docs/osp", "section": "xyznonexistent"}
+    );
+    assert "available_sections" in result;
+    assert len(result["available_sections"]) > 0;
+}
+
+test "recommend_workflow returns steps" {
+    tp = ToolProvider();
+    result = tp.call_tool("recommend_workflow", {"task": "build a todo app with auth"});
+    assert "steps" in result;
+    assert "resources" in result;
+    assert "category" in result;
+    assert len(result["steps"]) > 0;
+    assert "jac://guide/pitfalls" in result["resources"];
+}
+
+test "recommend_workflow general task" {
+    tp = ToolProvider();
+    result = tp.call_tool("recommend_workflow", {"task": "do something random"});
+    assert result["category"] == "general";
+    assert "steps" in result;
+}
+
+test "recommend_docs returns recommendations" {
+    tp = ToolProvider();
+    result = tp.call_tool("recommend_docs", {"task": "create walker endpoint"});
+    assert "recommendations" in result;
+    assert len(result["recommendations"]) >= 2;
+    uris = [r["uri"] for r in result["recommendations"]];
+    assert "jac://guide/pitfalls" in uris;
+}
+
+test "find_example returns matches" {
+    tp = ToolProvider();
+    result = tp.call_tool("find_example", {"task": "graph traversal nodes edges"});
+    assert "examples" in result;
+    assert len(result["examples"]) > 0;
+    categories = [e["category"] for e in result["examples"]];
+    assert "data_spatial" in categories;
+}
+
+test "fix_error valid code" {
+    tp = ToolProvider();
+    result = tp.call_tool("fix_error", {"code": "obj Foo { has x: int = 5; }"});
+    assert result["valid"];
+    assert len(result["errors"]) == 0;
+}
+
+test "fix_error invalid code" {
+    tp = ToolProvider();
+    result = tp.call_tool("fix_error", {"code": "}{}{asdf ???"});
+    assert not result["valid"];
+    assert len(result["errors"]) > 0;
+    first = result["errors"][0];
+    assert "category" in first;
+    assert "explanation" in first;
+}
+
+test "inspect_validation groups errors" {
+    tp = ToolProvider();
+    result = tp.call_tool(
+        "inspect_validation", {"code": "from os import path\nclass Foo:\n    pass"}
+    );
+    assert "groups" in result;
+    assert "root_cause" in result;
+}
+
+test "inspect_validation valid code" {
+    tp = ToolProvider();
+    result = tp.call_tool("inspect_validation", {"code": "obj Foo { has x: int = 5; }"});
+    assert result["valid"];
+}
+
+test "inspect_project returns structure" {
+    tp = ToolProvider();
+    result = tp.call_tool("inspect_project", {"project_root": "jac-mcp"});
+    assert "files" in result;
+    assert "file_counts" in result;
+    assert "entry_points" in result;
+    assert "walkers" in result;
+    assert result["file_counts"]["total"] > 0;
+}
+
+test "inspect_project bad path" {
+    tp = ToolProvider();
+    result = tp.call_tool("inspect_project", {"project_root": "/nonexistent/path"});
+    assert "error" in result;
+}
+
+# ── v2 Prompt Tests ──
+test "v2 prompt names registered" {
+    pp = PromptProvider();
+    prompts = pp.list_prompts();
+    names = [p["name"] for p in prompts];
+    assert "write_client_component" in names;
+    assert "write_walker_endpoint" in names;
+    assert "write_auth_flow" in names;
+    assert "write_fullstack_feature" in names;
+}
+
+test "write_client_component prompt loads client pitfalls" {
+    pp = PromptProvider();
+    result = pp.get_prompt(
+        "write_client_component", {"name": "TodoList", "purpose": "show todo items"}
+    );
+    messages = result.get("messages", []);
+    assert len(messages) == 2;
+    system_content = messages[0]["content"];
+    assert "NOT Python" in system_content;
+    user_content = messages[1]["content"];
+    assert "TodoList" in user_content;
+    assert "validate_jac" in user_content;
+}
+
+test "write_walker_endpoint prompt" {
+    pp = PromptProvider();
+    result = pp.get_prompt(
+        "write_walker_endpoint",
+        {"name": "get_tasks", "purpose": "fetch all tasks", "visibility": "pub"}
+    );
+    messages = result.get("messages", []);
+    assert len(messages) == 2;
+    user_content = messages[1]["content"];
+    assert "walker:pub" in user_content;
+    assert "get_tasks" in user_content;
+}
+
+test "write_auth_flow prompt" {
+    pp = PromptProvider();
+    result = pp.get_prompt(
+        "write_auth_flow", {"pages": "both", "redirect_to": "/dashboard"}
+    );
+    messages = result.get("messages", []);
+    user_content = messages[1]["content"];
+    assert "jacLogin" in user_content;
+    assert "/dashboard" in user_content;
+}
+
+test "write_fullstack_feature prompt" {
+    pp = PromptProvider();
+    result = pp.get_prompt(
+        "write_fullstack_feature",
+        {
+            "name": "tasks",
+            "purpose": "manage todos",
+            "data_model": "Task with title: str"
+        }
+    );
+    messages = result.get("messages", []);
+    user_content = messages[1]["content"];
+    assert "root spawn" in user_content;
+    assert "walker:pub" in user_content;
+    assert "Task with title: str" in user_content;
+}
+
+# ── Profile Config Tests ──
+test "config schema has profile option" {
+    schema = JacMcpPluginConfig.get_config_schema();
+    options = schema["options"];
+    assert "profile" in options;
+    assert options["profile"]["default"] == "full";
 }
