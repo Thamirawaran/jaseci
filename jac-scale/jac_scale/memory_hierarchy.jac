@@ -120,6 +120,9 @@ obj MongoBackend(PersistentMemory) {
     def bulk_put(anchors: Iterable[Anchor]) -> None;
     # Internal
     def _load_anchor(raw: dict[(str, Any)]) -> (Anchor | None);
+    def _put_node_atomic(
+        anchor: NodeAnchor, edges_added: list[str], edges_removed: list[str]
+    ) -> None;
 }
 
 """

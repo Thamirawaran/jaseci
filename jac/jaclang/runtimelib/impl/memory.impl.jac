@@ -348,6 +348,12 @@ impl SqliteMemory.sync -> None {
     }
     # Lazily create connection now that we have data to persist
     self._ensure_connection();
+    # Acquire write lock before reading to prevent concurrent commit races.
+    # Commit any implicit transaction first, then start an explicit one.
+    if self.__conn__ {
+        self.__conn__.commit();
+        self.__conn__.execute("BEGIN IMMEDIATE");
+    }
     # Handle garbage collected anchors (deletions)
     for anchor in self.__gc__ {
         self.__conn__.execute("DELETE FROM anchors WHERE id = ?", (str(anchor.id), ));
@@ -373,20 +379,38 @@ impl SqliteMemory.sync -> None {
 
             if stored and stored.is_populated() {
                 changed = False;
-                # Handle edge updates (CONNECT access)
+                # Handle edge updates with merge-based conflict resolution (CONNECT access)
                 if (
                     isinstance(stored, NodeAnchor)
                     and isinstance(anchor, NodeAnchor)
                     and stored.edges != anchor.edges
                     and Jac.check_connect_access(anchor)
                 ) {
-                    if not anchor.edges and not isinstance(anchor.archetype, Root) {
-                        self.__conn__.execute(
-                            "DELETE FROM anchors WHERE id = ?", (key, )
-                        );
+                    delta = anchor.edge_delta();
+                    if delta is not None {
+                        edges_added = set(delta[0]);
+                        edges_removed = set(delta[1]);
+                        # Apply delta to the stored (DB-current) edge list
+                        stored_set = set(e.id for e in stored.edges);
+                        merged_ids = (stored_set | edges_added) - edges_removed;
+                        edge_by_id = {e.id: e for e in stored.edges};
+                        edge_by_id.update({e.id: e for e in anchor.edges});
+                        stored.edges = [
+                            edge_by_id[eid]
+                            for eid in merged_ids
+                            if eid in edge_by_id
+                        ];
+                    } else {
+                        stored.edges = anchor.edges;
+                    }
+                    if not stored.edges and not isinstance(anchor.archetype, Root) {
+                        if self.__conn__ {
+                            self.__conn__.execute(
+                                "DELETE FROM anchors WHERE id = ?", (key, )
+                            );
+                        }
                         continue;
                     }
-                    stored.edges = anchor.edges;
                     changed = True;
                 }
                 # Handle access/archetype updates (WRITE access)
