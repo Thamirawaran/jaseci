@@ -3,16 +3,23 @@
 import from typing { Any }
 import re;
 
-"""Read MCP plugin config from jac.toml [plugins.mcp] section."""
+"""Read MCP plugin config from jac.toml [plugins.mcp] section, with CLI env var override."""
 def _get_mcp_config -> dict[str, object] {
+    import os;
+    cfg: dict[str, object] = {};
     try {
         import from jaclang.project.config { get_config }
         jac_cfg = get_config();
         if jac_cfg {
-            return jac_cfg.get_plugin_config("mcp");
+            cfg = dict(jac_cfg.get_plugin_config("mcp"));
         }
     } except Exception { }
-    return {};
+    # CLI --profile sets JAC_MCP_PROFILE env var, which overrides jac.toml
+    env_profile = os.environ.get("JAC_MCP_PROFILE", "");
+    if env_profile {
+        cfg["profile"] = env_profile;
+    }
+    return cfg;
 }
 
 """Return list of available tools with schemas, filtered by [plugins.mcp] config."""

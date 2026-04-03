@@ -35,6 +35,14 @@ glob registry = get_registry();
             short=""
         ),
         Arg.create(
+            "profile",
+            typ=str,
+            default="",
+            help="Tool profile: minimal (small models), standard, or full (default). Controls which tools are visible.",
+            choices=["minimal", "standard", "full", ""],
+            short=""
+        ),
+        Arg.create(
             "inspect",
             typ=bool,
             default=False,
@@ -45,6 +53,14 @@ glob registry = get_registry();
     ],
     examples=[
         ("jac mcp", "Start MCP server with stdio transport (default)"),
+        (
+            "jac mcp --profile minimal",
+            "Start with minimal tools for small models (GPT-4o, Haiku)"
+        ),
+        (
+            "jac mcp --profile full",
+            "Start with all tools for large models (Sonnet, Opus)"
+        ),
         ("jac mcp --transport sse --port 3001", "Start with SSE transport"),
         ("jac mcp --inspect", "List available resources, tools, and prompts"),
 
@@ -76,9 +92,12 @@ class JacCmd {
 
 """Pre-hook to handle mcp command."""
 def _handle_mcp_cmd(ctx: object) -> None {
+    import os;
+
     transport = ctx.get_arg("transport", "stdio");
     port = ctx.get_arg("port", 3001);
     host = ctx.get_arg("host", "127.0.0.1");
+    profile = ctx.get_arg("profile", "");
     inspect_mode = ctx.get_arg("inspect", False);
 
     # Load [plugins.mcp] from jac.toml as fallback defaults
@@ -95,6 +114,14 @@ def _handle_mcp_cmd(ctx: object) -> None {
         else mcp_cfg.get("transport", transport);
     port = port if port != 3001 else mcp_cfg.get("port", port);
     host = host if host != "127.0.0.1" else mcp_cfg.get("host", host);
+
+    # Set profile via env var so ToolProvider and ResourceProvider can read it
+    # Priority: CLI --profile > jac.toml profile > "full"
+    if profile {
+        os.environ["JAC_MCP_PROFILE"] = profile;
+    } elif "profile" in mcp_cfg {
+        os.environ["JAC_MCP_PROFILE"] = f"{mcp_cfg['profile']}";
+    }
 
     if inspect_mode {
         _print_inspect();
