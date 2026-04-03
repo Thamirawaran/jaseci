@@ -482,6 +482,34 @@ impl ToolProvider.list_tools -> list[dict[str, Any]] {
                 "required": ["task"]
             }
         },
+        {
+            "name": "fix_error",
+            "description": "Validate code, and if errors found, explain each error with fix suggestions and relevant pitfalls. Combines validate_jac + explain_error in one call.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "code": {
+                        "type": "string",
+                        "description": "Jac source code to validate and fix"
+                    }
+                },
+                "required": ["code"]
+            }
+        },
+        {
+            "name": "inspect_validation",
+            "description": "Validate code and return errors grouped by category (syntax, type, import, etc.) with the most impactful error first.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "code": {
+                        "type": "string",
+                        "description": "Jac source code to analyze"
+                    }
+                },
+                "required": ["code"]
+            }
+        },
 
     ];
 
@@ -711,6 +739,18 @@ impl ToolProvider.call_tool(name: str, arguments: dict[str, Any]) -> dict[str, A
                 return {"error": "Missing required argument: task"};
             }
             return find_example(task);
+        } elif name == "fix_error" {
+            code = arguments.get("code", "");
+            if not code {
+                return {"error": "Missing required argument: code"};
+            }
+            return fix_error(code);
+        } elif name == "inspect_validation" {
+            code = arguments.get("code", "");
+            if not code {
+                return {"error": "Missing required argument: code"};
+            }
+            return inspect_validation(code);
         } else {
             return {"error": f"Unknown tool: {name}"};
         }
@@ -1695,4 +1735,128 @@ impl find_example(task: str) -> dict[str, Any] {
         }
     }
     return {"task": task, "examples": results[:5]};
+}
+
+"""Validate code and explain each error with fix suggestions."""
+impl fix_error(code: str) -> dict[str, Any] {
+    import from jac_mcp.compiler_bridge { CompilerBridge }
+
+    # Step 1: validate
+    validation = CompilerBridge.typecheck_snippet(code);
+    if validation.get("valid", False) and not validation.get("errors") {
+        return {
+            "valid": True,
+            "message": "Code is valid — no errors found.",
+            "errors": [],
+            "warnings": validation.get("warnings", [])
+        };
+    }
+
+    # Step 2: explain each error
+    errors = validation.get("errors", []);
+    explained: list[dict[str, Any]] = [];
+    for err in errors {
+        msg = err.get("message", "");
+        explanation = explain_error(msg);
+        explained.append(
+            {
+                "line": err.get("line", 0),
+                "col": err.get("col", 0),
+                "message": msg,
+                "category": explanation.get("title", "Unknown"),
+                "explanation": explanation.get("explanation", ""),
+                "fix_example": explanation.get("example", ""),
+                "docs_uri": explanation.get("docs_uri", "jac://guide/pitfalls")
+            }
+        );
+    }
+
+    return {
+        "valid": False,
+        "error_count": len(explained),
+        "errors": explained,
+        "warnings": validation.get("warnings", []),
+        "suggestion": "Fix errors starting from the first one — later errors are often caused by earlier ones."
+    };
+}
+
+"""Validate code and return errors grouped by category with root cause ordering."""
+impl inspect_validation(code: str) -> dict[str, Any] {
+    import from jac_mcp.compiler_bridge { CompilerBridge }
+
+    validation = CompilerBridge.typecheck_snippet(code);
+    if validation.get("valid", False) and not validation.get("errors") {
+        return {
+            "valid": True,
+            "groups": {},
+            "summary": "Code is valid — no issues found.",
+            "warnings": validation.get("warnings", [])
+        };
+    }
+
+    errors = validation.get("errors", []);
+    # Classify each error
+    # Priority order: import errors first (cause cascading), then syntax, then type, then other
+    category_priority: dict[str, int] = {
+        "Import Error": 1,
+        "Syntax Error": 2,
+        "Python Syntax Detected": 3,
+        "Undefined Name": 4,
+        "Type Mismatch": 5,
+        "Attribute Error": 6,
+        "Compilation Error": 7
+    };
+    groups: dict[str, list] = {};
+    for err in errors {
+        msg = err.get("message", "");
+        explanation = explain_error(msg);
+        category = explanation.get("title", "Compilation Error");
+        if category not in groups {
+            groups[category] = [];
+        }
+        groups[category].append(
+            {
+                "line": err.get("line", 0),
+                "col": err.get("col", 0),
+                "message": msg,
+                "explanation": explanation.get("explanation", "")
+            }
+        );
+    }
+
+    # Sort groups by priority
+    group_list: list[tuple] = [
+        (category_priority.get(cat, 99), cat, errs) for (cat, errs) in groups.items()
+    ];
+    group_list.sort(key=lambda x : x[0]);
+    sorted_groups: list[dict[str, Any]] = [];
+    for (pri, cat, errs) in group_list {
+        err_list: list = list(errs);
+        sorted_groups.append(
+            {
+                "category": cat,
+                "count": len(err_list),
+                "priority": pri,
+                "errors": err_list
+            }
+        );
+    }
+
+    # Build root cause suggestion
+    if sorted_groups {
+        root = sorted_groups[0];
+        root_cause = f"Start with {root['category']} ({root[
+            'count'
+        ]} error(s)) — these are likely the root cause.";
+    } else {
+        root_cause = "No errors to fix.";
+    }
+
+    return {
+        "valid": False,
+        "total_errors": len(errors),
+        "groups": sorted_groups,
+        "root_cause": root_cause,
+        "warnings": validation.get("warnings", [])
+    };
 }

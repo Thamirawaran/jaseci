@@ -86,3 +86,9 @@ def recommend_docs(task: str) -> dict[str, Any];
 
 """Find the most relevant example categories and files for a task."""
 def find_example(task: str) -> dict[str, Any];
+
+"""Validate code and explain each error with fix suggestions."""
+def fix_error(code: str) -> dict[str, Any];
+
+"""Validate code and return errors grouped by category with root cause ordering."""
+def inspect_validation(code: str) -> dict[str, Any];
