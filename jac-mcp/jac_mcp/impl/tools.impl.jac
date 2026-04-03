@@ -393,9 +393,14 @@ impl ToolProvider.list_tools -> list[dict[str, Any]] {
 
     ];
 
-    # Filter tools based on [plugins.mcp] config toggles
+    # Filter tools based on [plugins.mcp] config toggles and profile
     cfg = _get_mcp_config();
+    profile = str(cfg.get("profile", "full"));
+
+    # Build effective flags: profile sets defaults, explicit config overrides
+    # minimal = hide advanced/transpile/cli, standard = hide advanced/cli, full = show all
     disabled: set[str] = set();
+
     if not cfg.get("enable_validate", True) {
         disabled.add("validate_jac");
         disabled.add("check_syntax");
@@ -404,11 +409,30 @@ impl ToolProvider.list_tools -> list[dict[str, Any]] {
         disabled.add("format_jac");
         disabled.add("lint_jac");
     }
-    if not cfg.get("enable_py2jac", True) {
+    # py2jac: on by default in standard/full, off in minimal
+    if not cfg.get("enable_py2jac", profile != "minimal") {
         disabled.add("py_to_jac");
     }
-    if not cfg.get("enable_ast", False) {
+    # AST: off by default except in full
+    if not cfg.get("enable_ast", profile == "full") {
         disabled.add("get_ast");
+    }
+    # Transpile (jac_to_py, jac_to_js): only in full
+    if not cfg.get("enable_transpile", profile == "full") {
+        disabled.add("jac_to_py");
+        disabled.add("jac_to_js");
+    }
+    # CLI tools (list_commands, get_command, execute_command): only in full
+    if not cfg.get("enable_cli_tools", profile == "full") {
+        disabled.add("list_commands");
+        disabled.add("get_command");
+        disabled.add("execute_command");
+    }
+    # Project tools: on by default in all profiles
+    if not cfg.get("enable_project", True) {
+        disabled.add("list_templates");
+        disabled.add("create_project");
+        disabled.add("preview_endpoints");
     }
     if disabled {
         return [

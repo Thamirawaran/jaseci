@@ -286,6 +286,7 @@ impl ResourceProvider.index_resources -> None {
             "mimeType": "text/plain",
             "_is_lazy_github": True
         };
+        self._apply_config_filters();
         return;
     }
     repo_root = Path(self._repo_root);
@@ -340,6 +341,8 @@ impl ResourceProvider.index_resources -> None {
             "_is_lazy_github": True
         };
     }
+    # Filter resources based on [plugins.mcp] config toggles
+    self._apply_config_filters();
 }
 
 """Index bundled content (pitfalls, patterns)."""
@@ -641,4 +644,45 @@ def _list_jac_files_recursive(github_path: str, base_path: str = "") -> list[tup
         }
     }
     return results;
+}
+
+"""Filter indexed resources based on [plugins.mcp] config toggles."""
+impl ResourceProvider._apply_config_filters -> None {
+    try {
+        import from jaclang.project.config { get_config }
+        jac_cfg = get_config();
+        if not jac_cfg {
+            return;
+        }
+        cfg = jac_cfg.get_plugin_config("mcp");
+    } except Exception {
+        return;
+    }
+    if not cfg.get("expose_grammar", True) {
+        self._resources.pop("jac://grammar/spec", None);
+        self._resources.pop("jac://grammar/tokens", None);
+    }
+    if not cfg.get("expose_docs", True) {
+        to_remove = [
+            uri
+            for uri in self._resources
+            if uri.startswith("jac://docs/")
+        ];
+        for uri in to_remove {
+            self._resources.pop(uri, None);
+        }
+    }
+    if not cfg.get("expose_examples", True) {
+        to_remove = [
+            uri
+            for uri in self._resources
+            if uri.startswith("jac://examples/")
+        ];
+        for uri in to_remove {
+            self._resources.pop(uri, None);
+        }
+    }
+    if not cfg.get("expose_pitfalls", True) {
+        self._resources.pop("jac://guide/pitfalls", None);
+    }
 }

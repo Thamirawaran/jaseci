@@ -39,4 +39,7 @@ obj ResourceProvider {
 
     """Fetch and cache GitHub example categories."""
     def _fetch_github_categories -> list[str];
+
+    """Filter indexed resources based on [plugins.mcp] config toggles."""
+    def _apply_config_filters -> None;
 }

@@ -86,6 +86,11 @@ class JacMcpPluginConfig {
                     "type": "string",
                     "default": ".",
                     "description": "Root directory for project-aware tools"
+                },
+                "profile": {
+                    "type": "string",
+                    "default": "full",
+                    "description": "Tool profile: minimal (fewer tools for small models), standard, or full (all tools)"
                 }
             }
         };
