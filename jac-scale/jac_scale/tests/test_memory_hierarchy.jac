@@ -1,6 +1,7 @@
 """Integration tests for memory hierarchy with testcontainers and jac start."""
 
 import contextlib;
+import concurrent.futures;
 import gc;
 import os;
 import socket;
@@ -1093,6 +1094,90 @@ test "in-place mutations on list and dict are persisted via hash-based dirty che
         mongo_client.close();
         mongo_container.stop();
         redis_container.stop();
+        time.sleep(0.5);
+        gc.collect();
+        if data_dir.exists() {
+            import shutil;
+            shutil.rmtree(data_dir);
+        }
+    }
+}
+
+test "concurrent requests do not lose edges" {
+    if not JAC_FILE.exists() {
+        raise FileNotFoundError(f"Missing Jac file: {JAC_FILE}");
+    }
+
+    data_dir = FIXTURES_DIR / ".jac" / "data";
+    if data_dir.exists() {
+        import shutil;
+        shutil.rmtree(data_dir);
+    }
+
+    mongo_container = MongoDbContainer("mongo:latest");
+    mongo_container.start();
+    mongo_uri = mongo_container.get_connection_url();
+    os.environ["MONGODB_URI"] = mongo_uri;
+
+    port = get_free_port();
+    base_url = f"http://localhost:{port}";
+    server = start_server(FIXTURES_DIR, JAC_FILE, port);
+
+    try {
+        token = register_user(base_url, "race_user", "pass123");
+
+        # Create a task (adds edge to user root)
+        res = requests.post(
+            f"{base_url}/walker/CreateTask",
+            json={"id": 1, "title": "survivor"},
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=2
+        );
+        assert res.status_code == 200;
+
+        # Fire concurrent read requests that touch the same root
+        def fire_read(i: int) -> int {
+            r = requests.post(
+                f"{base_url}/walker/GetAllTasks",
+                json={},
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=5
+            );
+            return r.status_code;
+        }
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as pool {
+            futures = [pool.submit(fire_read, i) for i in range(10)];
+            concurrent.futures.wait(futures);
+        }
+
+        # Verify the task edge survived concurrent access
+        time.sleep(0.5);
+        res = requests.post(
+            f"{base_url}/walker/GetAllTasks",
+            json={},
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=2
+        );
+        response_data = cast(
+            dict[str, Any], extract_transport_response_data(res.json())
+        );
+        tasks = response_data["reports"][0];
+        assert len(tasks) >= 1 , (
+            f"Task edge lost after concurrent requests! Got {len(tasks)} tasks"
+        );
+        task_titles = [t["title"] for t in tasks];
+        assert "survivor" in task_titles , (
+            f"'survivor' task lost! Got: {task_titles}"
+        );
+    } finally {
+        if server {
+            server.terminate();
+            with contextlib.suppress(Exception) {
+                server.wait(timeout=2);
+            }
+        }
+        mongo_container.stop();
         time.sleep(0.5);
         gc.collect();
         if data_dir.exists() {

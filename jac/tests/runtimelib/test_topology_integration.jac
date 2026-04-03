@@ -57,3 +57,59 @@ test "topology index survives anchor serialization" {
     assert len(decoded.adj_list) == 1;
     assert len(decoded.node_table) == 2;
 }
+
+test "concurrent edge adds merged in sqlite sync" {
+    import from jaclang.runtimelib.memory { SqliteMemory }
+    import from jaclang.jac0core.archetype { Root, NodeAnchor, EdgeAnchor }
+    tmpdir = mkdtemp();
+    try {
+        db_path = os.path.join(tmpdir, "test.db");
+
+        # Create root with one initial edge
+        mem0 = SqliteMemory(path=db_path);
+        r = Root();
+        anchor = r.__jac__;
+        anchor.persistent = True;
+        e0 = EdgeAnchor.__new__(EdgeAnchor);
+        e0.id = uuid4();
+        e0.persistent = True;
+        anchor.edges = [e0];
+        mem0.put(anchor);
+        mem0.close();
+
+        # Two "requests" load the same root
+        mem_a = SqliteMemory(path=db_path);
+        mem_b = SqliteMemory(path=db_path);
+        a = mem_a.get(anchor.id);
+        b = mem_b.get(anchor.id);
+        assert a is not None and b is not None;
+
+        # A adds edge_a, B adds edge_b
+        ea = EdgeAnchor.__new__(EdgeAnchor);
+        ea.id = uuid4();
+        a.edges.append(ea);
+
+        eb = EdgeAnchor.__new__(EdgeAnchor);
+        eb.id = uuid4();
+        b.edges.append(eb);
+
+        # Commit A then B
+        mem_a.sync();
+        mem_b.sync();
+        mem_a.close();
+        mem_b.close();
+
+        # Verify all 3 edges exist
+        mem_c = SqliteMemory(path=db_path);
+        result = mem_c.get(anchor.id);
+        assert result is not None;
+        ids = set(e.id for e in result.edges);
+        assert e0.id in ids , "Initial edge lost";
+        assert ea.id in ids , "Edge A lost — overwritten by B";
+        assert eb.id in ids , "Edge B lost";
+        assert len(ids) == 3 , f"Expected 3, got {len(ids)}";
+        mem_c.close();
+    } finally {
+        shutil.rmtree(tmpdir, ignore_errors=True);
+    }
+}
