@@ -277,7 +277,7 @@ impl ResourceProvider.index_resources -> None {
     self._repo_root = find_repo_root();
     self._resources = {};
     if self._repo_root is None {
-        # PyPI install — bundled content + bundled docs
+        # PyPI install - bundled content + bundled docs
         self._index_bundled();
         self._index_bundled_docs();
         # Examples fetched lazily from GitHub on first access
@@ -330,7 +330,7 @@ impl ResourceProvider.index_resources -> None {
     }
     # Bundled content (always available)
     self._index_bundled();
-    # Examples — prefer local repo, fall back to lazy GitHub
+    # Examples - prefer local repo, fall back to lazy GitHub
     examples_dir = repo_root / "jac" / "examples";
     if examples_dir.exists() {
         self._index_examples_local(examples_dir);
@@ -491,14 +491,14 @@ impl ResourceProvider.read_resource(uri: str) -> str {
     }
 }
 
-"""Read example resource — handles local dirs, lazy GitHub index, and on-demand GitHub fetch."""
+"""Read example resource - handles local dirs, lazy GitHub index, and on-demand GitHub fetch."""
 impl ResourceProvider._read_example(uri: str) -> str {
     info = self._resources.get(uri);
     # Local directory example
     if info and info.get("_is_dir", False) {
         return _read_example_dir(info["path"]);
     }
-    # Lazy GitHub index — fetch categories on first access
+    # Lazy GitHub index - fetch categories on first access
     if uri == "jac://examples/index" {
         if info and "_categories" in info {
             # Already populated
@@ -513,7 +513,7 @@ impl ResourceProvider._read_example(uri: str) -> str {
         }
         return "\n".join(lines);
     }
-    # Specific example — local info exists with categories but not this one,
+    # Specific example - local info exists with categories but not this one,
     # or it's a GitHub-sourced example
     example_name = uri.replace("jac://examples/", "");
     if not example_name {

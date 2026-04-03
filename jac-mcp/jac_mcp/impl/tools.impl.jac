@@ -1852,7 +1852,7 @@ impl fix_error(code: str) -> dict[str, Any] {
     if validation.get("valid", False) and not validation.get("errors") {
         return {
             "valid": True,
-            "message": "Code is valid — no errors found.",
+            "message": "Code is valid - no errors found.",
             "errors": [],
             "warnings": validation.get("warnings", [])
         };
@@ -1882,7 +1882,7 @@ impl fix_error(code: str) -> dict[str, Any] {
         "error_count": len(explained),
         "errors": explained,
         "warnings": validation.get("warnings", []),
-        "suggestion": "Fix errors starting from the first one — later errors are often caused by earlier ones."
+        "suggestion": "Fix errors starting from the first one - later errors are often caused by earlier ones."
     };
 }
 
@@ -1895,7 +1895,7 @@ impl inspect_validation(code: str) -> dict[str, Any] {
         return {
             "valid": True,
             "groups": {},
-            "summary": "Code is valid — no issues found.",
+            "summary": "Code is valid - no issues found.",
             "warnings": validation.get("warnings", [])
         };
     }
@@ -1953,7 +1953,7 @@ impl inspect_validation(code: str) -> dict[str, Any] {
         root = sorted_groups[0];
         root_cause = f"Start with {root['category']} ({root[
             'count'
-        ]} error(s)) — these are likely the root cause.";
+        ]} error(s)) - these are likely the root cause.";
     } else {
         root_cause = "No errors to fix.";
     }
@@ -2003,7 +2003,7 @@ impl inspect_project(project_root: str = ".") -> dict[str, Any] {
         } elif name.endswith(".sv.jac") {
             server_files.append(rel);
         } else {
-            # Regular .jac — scan for markers
+            # Regular .jac - scan for markers
             server_files.append(rel);
         }
     }
