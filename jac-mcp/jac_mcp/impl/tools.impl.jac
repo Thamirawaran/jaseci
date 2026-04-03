@@ -440,6 +440,48 @@ impl ToolProvider.list_tools -> list[dict[str, Any]] {
                 "required": ["uri", "section"]
             }
         },
+        {
+            "name": "recommend_workflow",
+            "description": "Given a task description, recommend which resources to fetch, which tools to use, and in what order. Call this FIRST when starting a new task.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "task": {
+                        "type": "string",
+                        "description": "Description of what you want to build or do (e.g. 'build a todo app with auth', 'create a walker endpoint')"
+                    }
+                },
+                "required": ["task"]
+            }
+        },
+        {
+            "name": "recommend_docs",
+            "description": "Given a task description, recommend the 2-5 most relevant doc resources with URIs and reasons.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "task": {
+                        "type": "string",
+                        "description": "Description of what you want to build or do"
+                    }
+                },
+                "required": ["task"]
+            }
+        },
+        {
+            "name": "find_example",
+            "description": "Given a task description, find the most relevant example categories and specific files.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "task": {
+                        "type": "string",
+                        "description": "Description of what you want to build or do"
+                    }
+                },
+                "required": ["task"]
+            }
+        },
 
     ];
 
@@ -651,6 +693,24 @@ impl ToolProvider.call_tool(name: str, arguments: dict[str, Any]) -> dict[str, A
                 return {"error": "Missing required arguments: uri and section"};
             }
             return get_doc_section(uri, section);
+        } elif name == "recommend_workflow" {
+            task = arguments.get("task", "");
+            if not task {
+                return {"error": "Missing required argument: task"};
+            }
+            return recommend_workflow(task);
+        } elif name == "recommend_docs" {
+            task = arguments.get("task", "");
+            if not task {
+                return {"error": "Missing required argument: task"};
+            }
+            return recommend_docs(task);
+        } elif name == "find_example" {
+            task = arguments.get("task", "");
+            if not task {
+                return {"error": "Missing required argument: task"};
+            }
+            return find_example(task);
         } else {
             return {"error": f"Unknown tool: {name}"};
         }
@@ -1246,4 +1306,393 @@ impl get_doc_section(uri: str, section: str) -> dict[str, Any] {
         "content": best["content"],
         "total_matches": len(matches)
     };
+}
+
+# ── Keyword rules for task classification ──
+glob _TASK_KEYWORDS: list[tuple] = [
+         # (keywords, category, docs, examples, pitfalls, workflow_steps)
+         (
+             [
+                 "client",
+                 "ui",
+                 "component",
+                 "jsx",
+                 "frontend",
+                 "react",
+                 "page",
+                 "button",
+                 "form",
+                 "input"
+             ],
+             "client_ui",
+             [
+                 "jac://guide/pitfalls_client",
+                 "jac://guide/patterns_client",
+                 "jac://docs/tutorial-fullstack-components",
+                 "jac://docs/tutorial-fullstack-state"
+             ],
+             ["littleX", "micro"],
+             ["jac://guide/pitfalls_client"],
+             [
+                 "Fetch jac://guide/pitfalls + jac://guide/patterns (core syntax)",
+                 "Fetch jac://guide/pitfalls_client + jac://guide/patterns_client",
+                 "Read jac://docs/tutorial-fullstack-components",
+                 "Write code inside cl { } blocks",
+                 "Validate with validate_jac"
+             ]
+         ),
+         (
+             [
+                 "walker",
+                 "node",
+                 "edge",
+                 "graph",
+                 "traverse",
+                 "osp",
+                 "spawn",
+                 "visit",
+                 "report"
+             ],
+             "osp",
+             [
+                 "jac://guide/pitfalls",
+                 "jac://guide/patterns",
+                 "jac://docs/osp",
+                 "jac://docs/walker-responses"
+             ],
+             ["data_spatial", "medical"],
+             ["jac://guide/pitfalls"],
+             [
+                 "Fetch jac://guide/pitfalls + jac://guide/patterns",
+                 "Read jac://docs/osp",
+                 "Write walker/node/edge code",
+                 "Validate with validate_jac"
+             ]
+         ),
+         (
+             ["endpoint", "api", "rest", "http", "server", "pub", "priv", "route"],
+             "api_endpoint",
+             [
+                 "jac://guide/pitfalls_api",
+                 "jac://guide/patterns_fullstack",
+                 "jac://docs/osp",
+                 "jac://docs/tutorial-production-local"
+             ],
+             ["data_spatial", "plugins"],
+             ["jac://guide/pitfalls_api"],
+             [
+                 "Fetch jac://guide/pitfalls + jac://guide/pitfalls_api",
+                 "Read jac://guide/patterns_fullstack for CRUD walker examples",
+                 "Write walker:pub or def:pub endpoints",
+                 "Use preview_endpoints to check routes",
+                 "Validate with validate_jac"
+             ]
+         ),
+         (
+             [
+                 "auth",
+                 "login",
+                 "signup",
+                 "logout",
+                 "user",
+                 "password",
+                 "jwt",
+                 "priv",
+                 "private"
+             ],
+             "auth",
+             [
+                 "jac://guide/pitfalls_api",
+                 "jac://guide/pitfalls_client",
+                 "jac://docs/tutorial-fullstack-auth"
+             ],
+             ["littleX"],
+             ["jac://guide/pitfalls_api", "jac://guide/pitfalls_client"],
+             [
+                 "Fetch jac://guide/pitfalls + jac://guide/pitfalls_api + jac://guide/pitfalls_client",
+                 "Read jac://docs/tutorial-fullstack-auth",
+                 "Use walker:priv for per-user isolated endpoints",
+                 "Import jacLogin/jacSignup from @jac/runtime in client",
+                 "Validate with validate_jac"
+             ]
+         ),
+         (
+             [
+                 "fullstack",
+                 "full-stack",
+                 "full stack",
+                 "sv import",
+                 "root spawn",
+                 "client server",
+                 "server client"
+             ],
+             "fullstack",
+             [
+                 "jac://guide/pitfalls_client",
+                 "jac://guide/pitfalls_fullstack",
+                 "jac://guide/pitfalls_api",
+                 "jac://guide/patterns_fullstack",
+                 "jac://docs/tutorial-fullstack-backend"
+             ],
+             ["littleX"],
+             [
+                 "jac://guide/pitfalls_client",
+                 "jac://guide/pitfalls_fullstack",
+                 "jac://guide/pitfalls_api"
+             ],
+             [
+                 "Fetch jac://guide/pitfalls + jac://guide/pitfalls_client + jac://guide/pitfalls_fullstack + jac://guide/pitfalls_api",
+                 "Read jac://guide/patterns_fullstack",
+                 "Write server walkers (walker:pub) in main.jac",
+                 "Write client UI (cl { }) with sv import + root spawn",
+                 "Validate with validate_jac"
+             ]
+         ),
+         (
+             [
+                 "llm",
+                 "ai",
+                 "by llm",
+                 "byllm",
+                 "semantic",
+                 "sem",
+                 "gpt",
+                 "model",
+                 "prompt"
+             ],
+             "ai_byllm",
+             [
+                 "jac://docs/byllm",
+                 "jac://docs/tutorial-ai-quickstart",
+                 "jac://docs/tutorial-ai-agentic"
+             ],
+             ["guess_game"],
+             ["jac://guide/pitfalls"],
+             [
+                 "Fetch jac://guide/pitfalls + jac://guide/patterns",
+                 "Read jac://docs/byllm for by llm syntax",
+                 "Write def ... by llm() functions",
+                 "Validate with validate_jac"
+             ]
+         ),
+         (
+             ["test", "testing", "assert", "test block"],
+             "testing",
+             ["jac://docs/testing", "jac://guide/patterns"],
+             ["manual_code"],
+             ["jac://guide/pitfalls"],
+             [
+                 "Fetch jac://guide/pitfalls + jac://guide/patterns",
+                 "Read jac://docs/testing",
+                 "Write test blocks: test \"name\" { assert ...; }",
+                 "Run with execute_command('test', [...])"
+             ]
+         ),
+         (
+             ["routing", "pages", "navigate", "link", "url", "param"],
+             "routing",
+             ["jac://guide/pitfalls_client", "jac://docs/tutorial-fullstack-routing"],
+             ["littleX"],
+             ["jac://guide/pitfalls_client"],
+             [
+                 "Fetch jac://guide/pitfalls + jac://guide/pitfalls_client",
+                 "Read jac://docs/tutorial-fullstack-routing",
+                 "Create pages/ directory with .jac files",
+                 "Use useParams() for dynamic routes, Outlet for layouts",
+                 "Validate with validate_jac"
+             ]
+         ),
+         (
+             ["deploy", "production", "kubernetes", "k8s", "scale", "docker"],
+             "deployment",
+             ["jac://docs/jac-scale", "jac://docs/tutorial-production-local"],
+             [],
+             [],
+             [
+                 "Read jac://docs/tutorial-production-local",
+                 "Use jac start app.jac to test locally",
+                 "Read jac://docs/jac-scale for Kubernetes deployment"
+             ]
+         ),
+         (
+             ["convert", "migrate", "python", "py2jac", "port"],
+             "migration",
+             [
+                 "jac://guide/pitfalls",
+                 "jac://guide/patterns",
+                 "jac://docs/python-integration"
+             ],
+             ["manual_code"],
+             ["jac://guide/pitfalls"],
+             [
+                 "Fetch jac://guide/pitfalls + jac://guide/patterns",
+                 "Use py_to_jac tool for automatic conversion",
+                 "Review and fix output using pitfalls guide",
+                 "Validate with validate_jac"
+             ]
+         ),
+
+     ];
+
+"""Classify a task description and return matching keyword rules."""
+def _classify_task(task: str) -> list[tuple] {
+    task_lower = task.lower();
+    scored: list[tuple] = [];
+    for rule in _TASK_KEYWORDS {
+        (keywords, category, docs, examples, pitfalls, steps) = rule;
+        score = sum(
+            [
+                1
+                for kw in keywords
+                if kw in task_lower
+            ]
+        );
+        if score > 0 {
+            scored.append((score, category, docs, examples, pitfalls, steps));
+        }
+    }
+    scored.sort(key=lambda x : -x[0]);
+    return scored;
+}
+
+"""Recommend workflow steps, resources, and tools for a task."""
+impl recommend_workflow(task: str) -> dict[str, Any] {
+    matches = _classify_task(task);
+    if not matches {
+        return {
+            "task": task,
+            "category": "general",
+            "steps": [
+                "Fetch jac://guide/pitfalls + jac://guide/patterns (always read these first)",
+                "Call understand_jac_and_jaseci for the full knowledge map",
+                "Use search_docs to find task-specific documentation",
+                "Write code, then validate with validate_jac",
+                "If errors, use explain_error and fix"
+            ],
+            "resources": ["jac://guide/pitfalls", "jac://guide/patterns"],
+            "tools_to_use": [
+                "understand_jac_and_jaseci",
+                "get_resource",
+                "search_docs",
+                "validate_jac",
+                "explain_error"
+            ]
+        };
+    }
+    (score, category, docs, examples, pitfalls, steps) = matches[0];
+    # Always prepend core pitfalls/patterns
+    all_resources = ["jac://guide/pitfalls", "jac://guide/patterns"];
+    for d in docs {
+        if d not in all_resources {
+            all_resources.append(d);
+        }
+    }
+    tools_to_use = ["get_resource", "validate_jac", "explain_error"];
+    if examples {
+        tools_to_use.append("get_example_file");
+    }
+    return {
+        "task": task,
+        "category": category,
+        "steps": steps,
+        "resources": all_resources,
+        "examples": examples,
+        "tools_to_use": tools_to_use
+    };
+}
+
+"""Recommend the most relevant doc resources for a task."""
+impl recommend_docs(task: str) -> dict[str, Any] {
+    matches = _classify_task(task);
+    recommendations: list[dict[str, str]] = [];
+    seen: set[str] = set();
+    # Always recommend core
+    recommendations.append(
+        {
+            "uri": "jac://guide/pitfalls",
+            "reason": "Core syntax pitfalls - always read before writing Jac"
+        }
+    );
+    seen.add("jac://guide/pitfalls");
+    recommendations.append(
+        {"uri": "jac://guide/patterns", "reason": "Core working code patterns"}
+    );
+    seen.add("jac://guide/patterns");
+
+    for match in matches {
+        (score, category, docs, examples, pitfalls, steps) = match;
+        for doc_uri in docs {
+            if doc_uri not in seen {
+                seen.add(doc_uri);
+                recommendations.append(
+                    {"uri": doc_uri, "reason": f"Relevant to {category} tasks"}
+                );
+            }
+        }
+    }
+    return {"task": task, "recommendations": recommendations[:7]};
+}
+
+"""Find the most relevant example categories and files for a task."""
+impl find_example(task: str) -> dict[str, Any] {
+    # Match against example descriptions
+    EXAMPLE_DESCRIPTIONS: dict[str, str] = {
+        "chess": "Native chess engine, declaration/impl separation, enums, obj inheritance, type system",
+        "data_spatial": "Core OSP: nodes, edges, walkers, entry/exit abilities, edge filtering, graph programming",
+        "guess_game": "Progressive guessing game, plain obj to walker-based OSP, then LLM hints, step by step learning",
+        "littleX": "Full-stack social app, OSP graph, user profiles, NLP search, real-world data-spatial",
+        "manual_code": "Circle class, declaration/impl separation, unit tests, clean OOP",
+        "medical": "Graph-based medical domain, Person nodes, typed role edges, healthcare data modelling",
+        "micro": "Micro-snippets, individual language features, access modifiers, comprehensions, syntax reference",
+        "plugins": "Plugin development, CLI command extension, walker REST API, jac-scale",
+        "rpg_game": "2D RPG game, library mode, Python interop, pygame, native integration",
+        "shopping_cart": "E-commerce shopping cart, obj-based domain model, OOP-style Jac"
+    };
+    task_lower = task.lower();
+    scored: list[tuple] = [];
+    for (cat, desc) in EXAMPLE_DESCRIPTIONS.items() {
+        desc_lower = desc.lower();
+        score = sum(
+            [
+                1
+                for word in task_lower.split()
+                if len(word) > 2 and word in desc_lower
+            ]
+        );
+        if score > 0 {
+            scored.append((score, cat, desc));
+        }
+    }
+    scored.sort(key=lambda x : -x[0]);
+
+    # Also check task keyword rules for example recommendations
+    matches = _classify_task(task);
+    keyword_examples: list[str] = [];
+    for match in matches {
+        for ex in match[3] {
+            if ex not in keyword_examples {
+                keyword_examples.append(ex);
+            }
+        }
+    }
+
+    # Merge: keyword matches first, then description matches
+    results: list[dict[str, str]] = [];
+    seen: set[str] = set();
+    for ex in keyword_examples {
+        if ex not in seen {
+            seen.add(ex);
+            desc = EXAMPLE_DESCRIPTIONS.get(ex, "");
+            results.append({"category": ex, "description": desc, "match": "keyword"});
+        }
+    }
+    for (score, cat, desc) in scored {
+        if cat not in seen {
+            seen.add(cat);
+            results.append(
+                {"category": cat, "description": desc, "match": "description"}
+            );
+        }
+    }
+    return {"task": task, "examples": results[:5]};
 }

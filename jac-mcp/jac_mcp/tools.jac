@@ -77,3 +77,12 @@ def get_example_file(category: str, file_path: str) -> dict[str, Any];
 
 """Get a specific section from a doc resource by heading match."""
 def get_doc_section(uri: str, section: str) -> dict[str, Any];
+
+"""Recommend workflow steps, resources, and tools for a task."""
+def recommend_workflow(task: str) -> dict[str, Any];
+
+"""Recommend the most relevant doc resources for a task."""
+def recommend_docs(task: str) -> dict[str, Any];
+
+"""Find the most relevant example categories and files for a task."""
+def find_example(task: str) -> dict[str, Any];
