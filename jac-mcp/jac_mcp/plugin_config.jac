@@ -82,6 +82,21 @@ class JacMcpPluginConfig {
                     "default": False,
                     "description": "Enable AST introspection tool (verbose)"
                 },
+                "enable_transpile": {
+                    "type": "bool",
+                    "default": False,
+                    "description": "Enable jac_to_py, jac_to_js transpilation tools (full profile default)"
+                },
+                "enable_cli_tools": {
+                    "type": "bool",
+                    "default": False,
+                    "description": "Enable list_commands, get_command, execute_command CLI tools (full profile default)"
+                },
+                "enable_project": {
+                    "type": "bool",
+                    "default": True,
+                    "description": "Enable project tools (list_templates, create_project, preview_endpoints)"
+                },
                 "project_root": {
                     "type": "string",
                     "default": ".",

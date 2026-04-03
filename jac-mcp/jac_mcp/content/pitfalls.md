@@ -1117,3 +1117,230 @@ cl {
     }
 }
 ```
+
+## Real-World Gotchas (from battle-tested applications)
+
+### 44. Use `root` (bare) in client code, NOT `root()`
+
+`root` is a built-in reference, not a function. Calling it as `root()` causes a runtime error in client code.
+
+WRONG:
+
+```
+cl {
+    result = root() spawn get_tasks();
+}
+```
+
+RIGHT:
+
+```jac
+cl {
+    result = root spawn get_tasks();
+}
+```
+
+### 45. Do NOT `sv import` walkers from the same file
+
+If a walker is defined in the same file as your `cl {}` block, it's already in scope. Adding `sv import` creates a duplicate declaration.
+
+WRONG:
+
+```
+walker:pub calculate { has expr: str; ... }
+cl {
+    sv import from .main { calculate }  # Duplicate!
+    result = root spawn calculate(expr="1+1");
+}
+```
+
+RIGHT:
+
+```jac
+walker:pub calculate { has expr: str; ... }
+cl {
+    # No import needed - calculate is already in scope
+    result = root spawn calculate(expr="1+1");
+}
+```
+
+### 46. Use `getattr` for `.reports` on walker spawn results
+
+The type checker may reject direct `.reports` access. Use `getattr` and always assign to a local variable before using in conditions.
+
+WRONG:
+
+```
+result = root spawn get_tasks();
+data = result.reports[0];  # Type checker may reject .reports
+```
+
+RIGHT:
+
+```jac
+result = root spawn get_tasks();
+rpts = getattr(result, "reports", []);
+if rpts and len(rpts) > 0 {
+    data = rpts[0];
+}
+```
+
+### 47. Do NOT cast raw JS objects with `dict()` or `list()` in client code
+
+In client code, `dict()` compiles to `Object.fromEntries()` and `list()` compiles to `Array.from()`, which silently lose data on plain objects/arrays.
+
+WRONG:
+
+```
+cl {
+    rpts = getattr(result, "reports", []);
+    data = dict(rpts[0]);   # Silent data loss
+    items = list(rpts[0]);  # Silent data loss
+}
+```
+
+RIGHT:
+
+```jac
+cl {
+    rpts = getattr(result, "reports", []);
+    data: object = rpts[0];   # Assign directly, no cast
+    items: object = rpts[0];
+}
+```
+
+### 48. Do NOT use `sv import` for types - only for server walkers/functions
+
+Using `sv import` for types (like `Any` from typing) emits unwanted async function declarations in compiled JS.
+
+WRONG:
+
+```
+sv import from typing { Any }  # Compiles to: async function Any() {...}
+```
+
+RIGHT:
+
+```jac
+import from typing { Any }  # Plain import for types
+sv import from ...main { my_walker }  # sv import only for server code
+```
+
+### 49. Guard against null/falsy API responses in client code
+
+Server walkers may return null or empty values. Always guard before using.
+
+WRONG:
+
+```
+cl {
+    has items: list = [];
+    async can with entry {
+        items = (root spawn get_items()).reports[0];  # Crashes if null
+    }
+}
+```
+
+RIGHT:
+
+```jac
+cl {
+    has items: list = [];
+    async can with entry {
+        result = root spawn get_items();
+        rpts = getattr(result, "reports", []);
+        items = rpts[0] if rpts and len(rpts) > 0 else [];
+    }
+}
+```
+
+### 50. Python string methods (`.upper()`, `.lower()`) don't exist in compiled JS
+
+Client code compiles to JavaScript where Python string methods aren't available.
+
+WRONG (in client code):
+
+```
+cl {
+    initial = name[0].upper();  # .upper() not in JavaScript
+}
+```
+
+RIGHT:
+
+```jac
+cl {
+    # Use slicing, or CSS text-transform for display
+    initial = name[0:1];
+}
+```
+
+### 51. JSX components with hooks must be rendered as JSX, not called as functions
+
+Calling a component as a function (`{NavBar("/feed")}`) instead of rendering it as JSX (`<NavBar />`) causes React hook count mismatches on re-render.
+
+WRONG:
+
+```
+cl {
+    def NavBar(path: str) -> JsxElement {
+        navigate = useNavigate();
+        ...
+    }
+    # Later: {NavBar("/feed")}  # Function call = hook crash
+}
+```
+
+RIGHT:
+
+```jac
+cl {
+    def:pub NavBar() -> JsxElement {
+        has currentPath: str = "/feed";
+        navigate = useNavigate();
+        ...
+    }
+    # Later: <NavBar currentPath="/feed" />
+}
+```
+
+### 52. `Router` needs `basename` when app is served at a sub-path
+
+Jac client apps are typically served at `/cl/app`. Without `basename`, routes won't match.
+
+WRONG:
+
+```
+cl {
+    return <Router>
+        <Routes><Route path="/" element={<Home />} /></Routes>
+    </Router>;  # Blank page - routes don't match /cl/app/
+}
+```
+
+RIGHT:
+
+```jac
+cl {
+    return <Router basename="/cl/app">
+        <Routes><Route path="/" element={<Home />} /></Routes>
+    </Router>;
+}
+```
+
+### 53. Extract computed dict keys before using in spread
+
+Complex expressions as dict keys don't compile correctly in JavaScript.
+
+WRONG:
+
+```
+merged = {**existing, post["id"]: new_value};  # Invalid JS
+```
+
+RIGHT:
+
+```jac
+key = post["id"];
+merged = {**existing, key: new_value};
+```

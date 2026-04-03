@@ -1,6 +1,23 @@
 """Implementation of MCP prompt templates."""
 
 import from typing { Any }
+import os;
+
+"""Get current MCP profile from env or config."""
+def _get_prompt_profile -> str {
+    env_profile = os.environ.get("JAC_MCP_PROFILE", "");
+    if env_profile {
+        return env_profile;
+    }
+    try {
+        import from jaclang.project.config { get_config }
+        jac_cfg = get_config();
+        if jac_cfg {
+            return str(jac_cfg.get_plugin_config("mcp").get("profile", "full"));
+        }
+    } except Exception { }
+    return "full";
+}
 
 """Load a resource's content, returning empty string if unavailable."""
 impl load_resource_content(uri: str) -> str {
@@ -14,33 +31,81 @@ impl load_resource_content(uri: str) -> str {
     return content;
 }
 
-"""Build system prompt with pitfalls and optional extra resources."""
+"""Build system prompt with pitfalls and optional extra resources.
+Adapts content based on profile:
+- minimal: essential pitfalls only (~300 lines), no extra resources
+- standard: full pitfalls, max 2 extra resources
+- full: full pitfalls, all extra resources
+"""
 impl build_system_prompt(extra_uris: list[str] = []) -> str {
+    profile = _get_prompt_profile();
+
     parts: list[str] = [
         "You are an expert Jac programmer. You MUST follow the syntax rules and patterns provided below EXACTLY.",
         "",
-        "CRITICAL: Jac is its own language — it is NOT Python. It evolves rapidly and your training data is almost certainly out of date.",
+        "CRITICAL: Jac is its own language - it is NOT Python. It evolves rapidly and your training data is almost certainly out of date.",
         "The reference material below is the ONLY source of truth you should use. If it contradicts your prior knowledge, the reference material is correct and your prior knowledge is wrong.",
         "Do NOT guess syntax. Do NOT interpolate from Python. Use ONLY what the reference material shows.",
-        "",
-        "After generating Jac code, you MUST validate it using the `validate_jac` tool. Do NOT present code to the user until it passes validation.",
-        "",
-        "## Common Mistakes AI Models Make with Jac (READ CAREFULLY — THIS MEANS YOU)",
-        load_resource_content("jac://guide/pitfalls"),
-
+        ""
     ];
-    for uri in extra_uris {
-        content = load_resource_content(uri);
-        if content {
-            parts.append(f"\n## Reference: {uri}\n{content}");
+
+    if profile == "minimal" {
+        # Minimal: use condensed essential pitfalls, validate with fix_error
+        parts.append(
+            "After generating Jac code, you MUST validate it using the `fix_error` tool. Do NOT present code to the user until fix_error returns valid=true."
+        );
+        parts.append("");
+        parts.append("## Essential Jac Pitfalls (READ CAREFULLY)");
+        parts.append(load_resource_content("jac://guide/pitfalls_essential"));
+        # No extra resources for minimal - keep context budget small
+    } elif profile == "standard" {
+        # Standard: full pitfalls, cap extra resources at 2
+        parts.append(
+            "After generating Jac code, you MUST validate it using the `validate_jac` or `fix_error` tool. Do NOT present code to the user until it passes validation."
+        );
+        parts.append("");
+        parts.append(
+            "## Common Mistakes AI Models Make with Jac (READ CAREFULLY - THIS MEANS YOU)"
+        );
+        parts.append(load_resource_content("jac://guide/pitfalls"));
+        for uri in extra_uris[:2] {
+            content = load_resource_content(uri);
+            if content {
+                parts.append(f"\n## Reference: {uri}\n{content}");
+            }
+        }
+    } else {
+        # Full: everything
+        parts.append(
+            "After generating Jac code, you MUST validate it using the `validate_jac` tool. Do NOT present code to the user until it passes validation."
+        );
+        parts.append("");
+        parts.append(
+            "## Common Mistakes AI Models Make with Jac (READ CAREFULLY - THIS MEANS YOU)"
+        );
+        parts.append(load_resource_content("jac://guide/pitfalls"));
+        for uri in extra_uris {
+            content = load_resource_content(uri);
+            if content {
+                parts.append(f"\n## Reference: {uri}\n{content}");
+            }
         }
     }
     return "\n".join(parts);
 }
 
-"""Return list of available prompts."""
+"""Return list of available prompts, filtered by profile."""
 impl PromptProvider.list_prompts -> list[dict[str, Any]] {
-    return [
+    profile = _get_prompt_profile();
+
+    # Prompts available per profile:
+    # minimal: write_module, write_walker, debug_error, write_client_component, write_walker_endpoint (5)
+    # standard: all except write_fullstack_feature (12)
+    # full: all (13)
+    minimal_prompts: set[str] = {"write_module","write_walker","debug_error","write_client_component","write_walker_endpoint"};
+    standard_excluded: set[str] = {"write_fullstack_feature"};
+
+    all_prompts: list[dict[str, Any]] = [
         {
             "name": "write_module",
             "description": "Generate a new Jac module with optional .impl.jac file",
@@ -262,6 +327,22 @@ impl PromptProvider.list_prompts -> list[dict[str, Any]] {
         },
 
     ];
+
+    # Filter prompts based on profile
+    if profile == "minimal" {
+        return [
+            p
+            for p in all_prompts
+            if p["name"] in minimal_prompts
+        ];
+    } elif profile == "standard" {
+        return [
+            p
+            for p in all_prompts
+            if p["name"] not in standard_excluded
+        ];
+    }
+    return all_prompts;
 }
 
 """Get a prompt by name with arguments."""
@@ -472,10 +553,10 @@ def _prompt_write_walker_endpoint(args: dict[str, str]) -> dict[str, Any] {
     user_msg = f"Generate a walker:{vis} endpoint named '{name}' that {purpose}.";
     user_msg += f"\nUse 'walker:{vis} {name} {{ ... }}' syntax.";
     user_msg += "\nWalker 'has' fields become the HTTP request body automatically.";
-    user_msg += "\nUse 'report' to return data — it becomes the HTTP response body.";
+    user_msg += "\nUse 'report' to return data - it becomes the HTTP response body.";
     user_msg += "\nUse 'can ... with Root entry {{ }}' for the entry ability.";
     if vis == "priv" {
-        user_msg += "\nWith :priv, each user gets isolated data automatically — no need for user ID filtering.";
+        user_msg += "\nWith :priv, each user gets isolated data automatically - no need for user ID filtering.";
     }
     if fields {
         user_msg += f"\nRequest body fields: {fields}";

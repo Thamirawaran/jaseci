@@ -7,7 +7,9 @@ import from urllib.request { urlopen, Request }
 import from urllib.error { URLError }
 
 glob GITHUB_API_BASE: str = "https://api.github.com/repos/jaseci-labs/jaseci",
-     _github_cache: dict[str, str] = {};
+     _github_cache: dict[str, str] = {},
+     _github_api_cache: dict[str, Any] = {},
+     _resource_content_cache: dict[str, str] = {};
 
 """Find the repo root by walking up from jaclang package location."""
 impl find_repo_root -> str | None {
@@ -379,6 +381,16 @@ impl ResourceProvider._index_bundled -> None {
             "path": str(understand_path)
         };
     }
+    pitfalls_essential_path = content_dir / "pitfalls_essential.md";
+    if pitfalls_essential_path.exists() {
+        self._resources["jac://guide/pitfalls_essential"] = {
+            "uri": "jac://guide/pitfalls_essential",
+            "name": "Essential Jac Pitfalls (Top 15)",
+            "description": "Condensed top-15 pitfalls for small models - covers ~80% of real failures",
+            "mimeType": "text/markdown",
+            "path": str(pitfalls_essential_path)
+        };
+    }
 }
 
 """Index bundled docs copied at release time."""
@@ -443,11 +455,19 @@ impl ResourceProvider.list_resources -> list[dict[str, str]] {
     return result;
 }
 
-"""Read resource content by URI."""
+"""Read resource content by URI. Results are cached per session."""
 impl ResourceProvider.read_resource(uri: str) -> str {
+    # Check session cache first
+    if uri in _resource_content_cache {
+        return _resource_content_cache[uri];
+    }
     # Handle lazy GitHub examples (registered or on-demand)
     if uri.startswith("jac://examples/") {
-        return self._read_example(uri);
+        result = self._read_example(uri);
+        if not result.startswith("Error:") {
+            _resource_content_cache[uri] = result;
+        }
+        return result;
     }
     if uri not in self._resources {
         return f"Error: Resource not found: {uri}";
@@ -460,8 +480,10 @@ impl ResourceProvider.read_resource(uri: str) -> str {
     }
     try {
         with open(file_path, "r") as f {
-            return f.read();
+            content = f.read();
         }
+        _resource_content_cache[uri] = content;
+        return content;
     } except FileNotFoundError {
         return f"Error: File not found: {file_path}";
     } except Exception as e {
@@ -519,8 +541,11 @@ def _read_example_dir(dir_path: str) -> str {
     return "\n\n".join(result_parts);
 }
 
-"""Fetch JSON from a URL, returns parsed dict/list or None on failure."""
+"""Fetch JSON from a URL, returns parsed dict/list or None on failure. Cached per session."""
 def _github_api_get(url: str) -> Any {
+    if url in _github_api_cache {
+        return _github_api_cache[url];
+    }
     try {
         req = Request(
             url,
@@ -530,7 +555,9 @@ def _github_api_get(url: str) -> Any {
             }
         );
         with urlopen(req, timeout=10) as resp {
-            return json.loads(resp.read().decode());
+            result = json.loads(resp.read().decode());
+            _github_api_cache[url] = result;
+            return result;
         }
     } except (URLError, json.JSONDecodeError, OSError) {
         return None;

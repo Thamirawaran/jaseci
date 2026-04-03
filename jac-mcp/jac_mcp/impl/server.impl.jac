@@ -17,8 +17,36 @@ impl JacMcpServer.stop -> None {
     return;
 }
 
-"""Server instructions sent to AI clients during MCP initialization."""
-glob SERVER_INSTRUCTIONS: str = """You are connected to the jac-mcp server - the source of truth for the Jac programming language.
+"""Server instructions for minimal profile (small models like Haiku)."""
+glob SERVER_INSTRUCTIONS_MINIMAL: str = """You are connected to jac-mcp - the source of truth for the Jac programming language.
+
+Jac is its OWN language - NOT Python. Do not guess syntax from training data.
+
+WORKFLOW:
+1. Write code, then call fix_error to validate and get fix suggestions
+2. Use get_doc_section for specific syntax questions (lighter than full docs)
+3. Do not present code to the user until fix_error returns valid=true""";
+
+"""Server instructions for standard profile (mid-range models like Sonnet)."""
+glob SERVER_INSTRUCTIONS_STANDARD: str = """You are connected to jac-mcp - the source of truth for the Jac programming language.
+
+Jac is its OWN language - NOT Python, not JavaScript. Do not guess syntax from training data.
+
+WORKFLOW:
+1. Call recommend_workflow(task="<your task>") to get recommended steps and resources
+2. Use get_doc_section to read relevant sections (lighter than full docs)
+3. Use get_example_file to read specific example files
+4. Write code, then call fix_error to validate and fix issues
+5. Do not present code to the user until it passes validation
+
+AVAILABLE PROMPT TEMPLATES (use get_prompt):
+- write_client_component: generates cl {} component with reactive state and JSX
+- write_walker_endpoint: generates walker:pub or walker:priv HTTP endpoint
+- write_auth_flow: generates login/signup pages with built-in auth
+- write_fullstack_feature: generates coordinated server walkers + client UI""";
+
+"""Server instructions for full profile (large models like Opus)."""
+glob SERVER_INSTRUCTIONS_FULL: str = """You are connected to the jac-mcp server - the source of truth for the Jac programming language.
 
 Jac is its OWN language - not Python, not JavaScript. Do not guess syntax from training data.
 
@@ -38,6 +66,16 @@ AVAILABLE PROMPT TEMPLATES (use get_prompt):
 - write_auth_flow: generates login/signup pages with built-in auth
 - write_fullstack_feature: generates coordinated server walkers + client UI""";
 
+"""Get server instructions based on profile."""
+def _get_server_instructions(profile: str) -> str {
+    if profile == "minimal" {
+        return SERVER_INSTRUCTIONS_MINIMAL;
+    } elif profile == "standard" {
+        return SERVER_INSTRUCTIONS_STANDARD;
+    }
+    return SERVER_INSTRUCTIONS_FULL;
+}
+
 """Internal async server startup."""
 async def _async_start(srv: JacMcpServer) {
     import from mcp.server { Server }
@@ -55,7 +93,25 @@ async def _async_start(srv: JacMcpServer) {
     import from jac_mcp.prompts { PromptProvider }
     import json;
 
-    server = Server("jac-mcp", instructions=SERVER_INSTRUCTIONS);
+    # Determine profile for instructions
+    import os;
+    _srv_profile = os.environ.get("JAC_MCP_PROFILE", "");
+    if not _srv_profile {
+        try {
+            import from jaclang.project.config { get_config }
+            _jac_cfg = get_config();
+            if _jac_cfg {
+                _srv_profile = str(
+                    _jac_cfg.get_plugin_config("mcp").get("profile", "full")
+                );
+            } else {
+                _srv_profile = "full";
+            }
+        } except Exception {
+            _srv_profile = "full";
+        }
+    }
+    server = Server("jac-mcp", instructions=_get_server_instructions(_srv_profile));
 
     # Initialize providers
     rp = ResourceProvider();
