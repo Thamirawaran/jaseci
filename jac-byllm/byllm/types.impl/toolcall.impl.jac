@@ -13,6 +13,28 @@ impl ToolCall.__call__ -> ToolCallResultMsg {
     );
 }
 
+"""Execute the tool call asynchronously and return a result message.
+
+Async tools are awaited directly. Sync tools are offloaded to a thread
+via asyncio.to_thread() so they never block the event loop.
+"""
+impl ToolCall.acall -> ToolCallResultMsg {
+    import asyncio;
+    import inspect;
+    if self.args is not None {
+        if inspect.iscoroutinefunction(self.tool.func) {
+            result = await self.tool(**self.args);
+        } else {
+            result = await asyncio.to_thread(self.tool.__call__, **self.args);
+        }
+    } else {
+        raise ByLLMError("ToolCall.args is None, expected a dictionary");
+    }
+    return ToolCallResultMsg(
+        content=str(result), tool_call_id=self.call_id, name=self.tool.get_name(),
+    );
+}
+
 """Return the string representation of the tool call."""
 impl ToolCall.__str__ -> str {
     params = ", ".join(f"{k}={v}" for (k, v) in self.args.items());

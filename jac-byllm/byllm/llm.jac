@@ -11,7 +11,7 @@ import json;
 import random;
 import time;
 
-import from typing { Generator }
+import from typing { AsyncGenerator, Generator }
 import from byllm.mtir { MTRuntime }
 import litellm;
 import from litellm._logging { _disable_debugging }
@@ -73,6 +73,13 @@ obj BaseLLM {
     def make_model_params(mt_run: MTRuntime) -> dict;
     def log_info(message: str) -> None;
     def format_prompt(params: dict) -> str;
+    # Shared helpers (used by both sync and async paths)
+    def _prepare_call_params(mt_run: MTRuntime) -> dict;
+    def _parse_response(response: dict, mt_run: MTRuntime) -> CompletionResult;
+    def _with_finish_tool(mt_run: MTRuntime) -> tuple;
+    def _aggregate_usage -> StreamEvent | None;
+    def _max_tool_result_len(mt_run: MTRuntime) -> int;
+    # Sync dispatch
     def dispatch_no_streaming(mt_run: MTRuntime) -> CompletionResult;
     def dispatch_streaming(mt_run: MTRuntime) -> Generator[str, None, None];
     def model_call_no_stream(params: dict) -> dict;
@@ -83,8 +90,20 @@ obj BaseLLM {
     def _yield_recovery_result(
         recovery_resp: CompletionResult, iter_count: int, mt_run: MTRuntime
     ) -> Generator[StreamEvent, None, None];
-
     def _invoke_streaming(mt_run: MTRuntime) -> Generator[StreamEvent, None, None];
+    # Async dispatch — mirrors sync using litellm.acompletion / AsyncOpenAI
+    async def ainvoke(mt_run: MTRuntime) -> object;
+    async def adispatch_no_streaming(mt_run: MTRuntime) -> CompletionResult;
+    async def adispatch_streaming(mt_run: MTRuntime) -> AsyncGenerator[str, None];
+    async def amodel_call_no_stream(params: dict) -> dict;
+    async def amodel_call_with_stream(params: dict) -> AsyncGenerator[str, None];
+    async def _ainvoke_streaming(mt_run: MTRuntime) -> AsyncGenerator[StreamEvent, None];
+    async def _astream_final_answer(mt_run: MTRuntime) -> AsyncGenerator[str, None];
+    async def _aforce_final_answer(mt_run: MTRuntime) -> object;
+    async def _aattempt_recovery(mt_run: MTRuntime) -> CompletionResult | None;
+    async def _ayield_recovery_result(
+        recovery_resp: CompletionResult, iter_count: int, mt_run: MTRuntime
+    ) -> AsyncGenerator[StreamEvent, None];
 }
 
 """Mock LLM connector that simulates responses for testing.
@@ -96,6 +115,8 @@ obj MockLLM(BaseLLM) {
     def postinit -> None;
     override def dispatch_no_streaming(mt_run: MTRuntime) -> CompletionResult;
     override def dispatch_streaming(mt_run: MTRuntime) -> Generator[str, None, None];
+    override async def adispatch_no_streaming(mt_run: MTRuntime) -> CompletionResult;
+    override async def adispatch_streaming(mt_run: MTRuntime) -> AsyncGenerator[str, None];
 }
 
 """Pool of LLM models with fallback and load-balancing via LiteLLM Router.
@@ -136,4 +157,7 @@ obj Model(BaseLLM) {
     def model_call_http(
         url: str, token: str, payload: dict, ca_bundle: str | bool
     ) -> object;
+    override async def ainvoke(mt_run: MTRuntime) -> object;
+    async def amodel_call_no_stream(params: dict) -> dict;
+    async def amodel_call_with_stream(params: dict);
 }

@@ -50,3 +50,26 @@ impl MockLLM.dispatch_streaming(mt_run: MTRuntime) -> Generator[str, None, None]
         }
     }
 }
+
+# ---------------------------------------------------------------------------
+# Async mock variants
+# ---------------------------------------------------------------------------
+
+"""Async dispatch — delegates to sync since MockLLM has no real I/O."""
+impl MockLLM.adispatch_no_streaming(mt_run: MTRuntime) -> CompletionResult {
+    return self.dispatch_no_streaming(mt_run);
+}
+
+"""Async mock streaming with non-blocking delays."""
+impl MockLLM.adispatch_streaming(mt_run: MTRuntime) -> AsyncGenerator[str, None] {
+    import asyncio;
+    output = self.config["outputs"].pop(0);  # type: ignore
+    if mt_run.stream {
+        while output {
+            chunk_len = random.randint(3, 10);
+            yield output[:chunk_len];
+            await asyncio.sleep(random.uniform(0.01, 0.05));
+            output = output[chunk_len:];
+        }
+    }
+}

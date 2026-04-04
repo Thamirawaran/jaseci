@@ -87,6 +87,7 @@ obj ToolCall {
         args: dict;
 
     def __call__ -> ToolCallResultMsg;
+    async def acall -> ToolCallResultMsg;
     def __str__ -> str;
     def is_finish_call -> bool;
     def get_output -> object;
