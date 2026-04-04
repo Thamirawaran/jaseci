@@ -1126,32 +1126,52 @@ test "concurrent requests do not lose edges" {
     try {
         token = register_user(base_url, "race_user", "pass123");
 
-        # Create a task (adds edge to user root)
+        # Create initial task
         res = requests.post(
             f"{base_url}/walker/CreateTask",
-            json={"id": 1, "title": "survivor"},
+            json={"id": 1, "title": "first"},
             headers={"Authorization": f"Bearer {token}"},
             timeout=2
         );
         assert res.status_code == 200;
 
-        # Fire concurrent read requests that touch the same root
-        def fire_read(i: int) -> int {
+        # The real race: create edge + concurrent scalar mutation on same graph
+        # CreateTask adds a new edge to root
+        # CompleteTask traverses root (loading stale edge snapshot) then mutates a scalar
+        def create_task -> int {
             r = requests.post(
-                f"{base_url}/walker/GetAllTasks",
-                json={},
+                f"{base_url}/walker/CreateTask",
+                json={"id": 2, "title": "survivor"},
                 headers={"Authorization": f"Bearer {token}"},
                 timeout=5
             );
             return r.status_code;
         }
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as pool {
-            futures = [pool.submit(fire_read, i) for i in range(10)];
-            concurrent.futures.wait(futures);
+        def complete_task -> int {
+            r = requests.post(
+                f"{base_url}/walker/CompleteTask",
+                json={"id": 1},
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=5
+            );
+            return r.status_code;
         }
 
-        # Verify the task edge survived concurrent access
+        # Fire edge-add + scalar-mutation concurrently (multiple rounds)
+        for _ in range(3) {
+            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool {
+                futures = [
+                    pool.submit(create_task),
+                    pool.submit(complete_task),
+                    pool.submit(complete_task),
+                    pool.submit(complete_task)
+                ];
+                concurrent.futures.wait(futures);
+            }
+        }
+
+        # Verify the new task edge survived concurrent scalar mutations
         time.sleep(0.5);
         res = requests.post(
             f"{base_url}/walker/GetAllTasks",
@@ -1163,12 +1183,9 @@ test "concurrent requests do not lose edges" {
             dict[str, Any], extract_transport_response_data(res.json())
         );
         tasks = response_data["reports"][0];
-        assert len(tasks) >= 1 , (
-            f"Task edge lost after concurrent requests! Got {len(tasks)} tasks"
-        );
-        task_titles = [t["title"] for t in tasks];
+        task_titles = [t.get("title", "") for t in tasks];
         assert "survivor" in task_titles , (
-            f"'survivor' task lost! Got: {task_titles}"
+            f"Edge lost after concurrent scalar mutations! Got: {task_titles}"
         );
     } finally {
         if server {

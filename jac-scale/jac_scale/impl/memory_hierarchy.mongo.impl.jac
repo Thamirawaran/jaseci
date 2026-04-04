@@ -202,16 +202,15 @@ impl MongoBackend.sync -> None {
         current_hash = Serializer._compute_hash(anchor);
         if current_hash != anchor.hash {
             try {
-                # For NodeAnchors with edge deltas, use atomic pipeline update
+                # For NodeAnchors loaded from DB, always use atomic pipeline
+                # to preserve DB-current edges even when only scalar fields changed
                 if isinstance(anchor, NodeAnchor) {
                     delta = anchor.edge_delta();
                     if delta is not None {
                         added = [str(eid) for eid in delta[0]];
                         removed = [str(eid) for eid in delta[1]];
-                        if added or removed {
-                            self._put_node_atomic(anchor, added, removed);
-                            continue;
-                        }
+                        self._put_node_atomic(anchor, added, removed);
+                        continue;
                     }
                 }
                 self.put(anchor);
