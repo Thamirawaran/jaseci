@@ -166,10 +166,9 @@ obj KubernetesMicroserviceTarget(KubernetesTarget) {
                     } except Exception {
                         continue;
                     }
-                    # All counters below are maintained by the Deployment
-                    # controller and scoped to the current ReplicaSet, so pods
-                    # from a superseded revision that are still being
-                    # garbage-collected never enter the verdict.
+                    # Deployment status counters, maintained by the controller
+                    # as of observed_generation - hence the observed >=
+                    # generation guard before they are trusted below.
                     status = d.status;
                     desired = (
                         d.spec.replicas
@@ -182,11 +181,10 @@ obj KubernetesMicroserviceTarget(KubernetesTarget) {
                     replicas = (status.replicas or 0) if status else 0;
                     available = (status.available_replicas or 0) if status else 0;
 
-                    # Fail fast on a genuinely stuck rollout: the controller
-                    # flips Progressing=False/ProgressDeadlineExceeded once the
-                    # new ReplicaSet fails to make progress within the
-                    # Deployment's progressDeadlineSeconds. Only trusted once
-                    # status has caught up with the spec we just applied.
+                    # Stuck rollout: the controller sets Progressing=False with
+                    # reason ProgressDeadlineExceeded when the new ReplicaSet
+                    # makes no progress within progressDeadlineSeconds. Trusted
+                    # only once status reflects the spec we applied.
                     if status and status.conditions and observed >= generation {
                         for cond in status.conditions {
                             if (
@@ -202,9 +200,9 @@ obj KubernetesMicroserviceTarget(KubernetesTarget) {
                         }
                     }
 
-                    # Complete == kubectl's definition: status is current, every
-                    # new-template pod exists, no old pods linger, and the new
-                    # pods are available.
+                    # Rollout complete, per kubectl's rule: status is current,
+                    # all new-template pods exist, no old pods linger, and they
+                    # are available.
                     rolled_out = (
                         observed >= generation
                         and updated >= desired
@@ -214,12 +212,12 @@ obj KubernetesMicroserviceTarget(KubernetesTarget) {
                     if rolled_out {
                         ready += 1;
                     } elif not failure {
-                        # Fast-fail a crash-looping *current* generation without
-                        # waiting out progressDeadlineSeconds. Scoped to the
-                        # live ReplicaSet's pod-template-hash so a superseded
-                        # revision's pod (still being garbage-collected) can
-                        # never trip it. If the hash can't be resolved yet we
-                        # skip rather than fall back to an unscoped scan.
+                        # Fast-fail a crash-looping current-generation pod
+                        # without waiting out progressDeadlineSeconds. Scoped to
+                        # the live RS's pod-template-hash so a superseded
+                        # revision's pod (mid garbage-collection) can't trip it;
+                        # if the hash isn't resolvable yet, skip rather than scan
+                        # unscoped.
                         thash = self._current_template_hash(apps_v1, d, ns);
                         if thash {
                             crash = self._current_gen_crash(core_v1, ns, thash);
@@ -259,14 +257,12 @@ obj KubernetesMicroserviceTarget(KubernetesTarget) {
     }
 
     def _current_template_hash(apps_v1: any, deployment: any, ns: str) -> (str | None) {
-        # Resolve the pod-template-hash of the ReplicaSet backing this
-        # Deployment's current revision. The Deployment controller assigns a
-        # monotonically increasing `deployment.kubernetes.io/revision`
-        # annotation to the Deployment and to each ReplicaSet; the current RS
-        # is the one whose revision matches (equivalently, the highest). We
-        # read the controller-stamped hash label rather than recomputing it.
-        # Returns None when it cannot be resolved yet (new RS not created), so
-        # callers skip crash detection instead of scanning unscoped.
+        # Pod-template-hash of the ReplicaSet for this Deployment's current
+        # revision. The controller stamps a monotonically increasing
+        # deployment.kubernetes.io/revision on the Deployment and each RS; the
+        # current RS is the one whose revision matches (the highest). Reads the
+        # controller-set hash label, never recomputes it. None if not yet
+        # resolvable, so callers skip crash detection rather than scan unscoped.
         rev_key = "deployment.kubernetes.io/revision";
         hash_key = "pod-template-hash";
         dep_uid = deployment.metadata.uid if deployment.metadata else None;
@@ -328,12 +324,10 @@ obj KubernetesMicroserviceTarget(KubernetesTarget) {
     def _current_gen_crash(
         core_v1: any, ns: str, template_hash: str, threshold: int = 3
     ) -> str {
-        # Report a crash-looping pod belonging *only* to the given
-        # pod-template-hash (the current generation). A container is fatal
-        # when it has restarted at/above the threshold and is neither running
-        # nor cleanly completed - mirroring check_pods_restarted's liveness
-        # test so a container that restarted once and recovered, or an init
-        # container that exited 0, is not misread as a failure.
+        # Crash-looping pod restricted to the given pod-template-hash (current
+        # generation only). Fatal = restarted at/above threshold and neither
+        # running nor cleanly exited, so a since-recovered restart or an init
+        # container that exited 0 is not misread as a failure.
         try {
             pods = core_v1.list_namespaced_pod(
                 namespace=ns, label_selector=f"pod-template-hash={template_hash}"
