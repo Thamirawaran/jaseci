@@ -149,6 +149,7 @@ obj KubernetesMicroserviceTarget(KubernetesTarget) {
         }
         self._load_kube_config();
         apps_v1 = client.AppsV1Api();
+        core_v1 = client.CoreV1Api();
         ns = self.k8s_config.namespace;
         total = len(names);
         elapsed = 0;
@@ -212,6 +213,22 @@ obj KubernetesMicroserviceTarget(KubernetesTarget) {
                     );
                     if rolled_out {
                         ready += 1;
+                    } elif not failure {
+                        # Fast-fail a crash-looping *current* generation without
+                        # waiting out progressDeadlineSeconds. Scoped to the
+                        # live ReplicaSet's pod-template-hash so a superseded
+                        # revision's pod (still being garbage-collected) can
+                        # never trip it. If the hash can't be resolved yet we
+                        # skip rather than fall back to an unscoped scan.
+                        thash = self._current_template_hash(apps_v1, d, ns);
+                        if thash {
+                            crash = self._current_gen_crash(core_v1, ns, thash);
+                            if crash {
+                                failure = (
+                                    f"deployment '{name}' not healthy: {crash}"
+                                );
+                            }
+                        }
                     }
                     details.append(f"{name}={available}/{desired}");
                 }
@@ -239,6 +256,111 @@ obj KubernetesMicroserviceTarget(KubernetesTarget) {
         raise Exception(
             f"timed out after {timeout}s ({ready}/{total} deployments ready)"
         );
+    }
+
+    def _current_template_hash(apps_v1: any, deployment: any, ns: str) -> (str | None) {
+        # Resolve the pod-template-hash of the ReplicaSet backing this
+        # Deployment's current revision. The Deployment controller assigns a
+        # monotonically increasing `deployment.kubernetes.io/revision`
+        # annotation to the Deployment and to each ReplicaSet; the current RS
+        # is the one whose revision matches (equivalently, the highest). We
+        # read the controller-stamped hash label rather than recomputing it.
+        # Returns None when it cannot be resolved yet (new RS not created), so
+        # callers skip crash detection instead of scanning unscoped.
+        rev_key = "deployment.kubernetes.io/revision";
+        hash_key = "pod-template-hash";
+        dep_uid = deployment.metadata.uid if deployment.metadata else None;
+        if not dep_uid {
+            return None;
+        }
+        want_rev = None;
+        if deployment.metadata.annotations {
+            want_rev = deployment.metadata.annotations.get(rev_key);
+        }
+        try {
+            rs_list = apps_v1.list_namespaced_replica_set(namespace=ns);
+        } except Exception {
+            return None;
+        }
+        owned: list[any] = [];
+        for rs in rs_list.items {
+            for ref in (rs.metadata.owner_references or []) {
+                if ref.uid == dep_uid {
+                    owned.append(rs);
+                    break;
+                }
+            }
+        }
+        current: any = None;
+        if want_rev is not None {
+            for rs in owned {
+                ann = rs.metadata.annotations;
+                if ann and ann.get(rev_key) == want_rev {
+                    current = rs;
+                    break;
+                }
+            }
+        }
+        if current is None {
+            best = -1;
+            for rs in owned {
+                ann = rs.metadata.annotations;
+                raw = ann.get(rev_key) if ann else None;
+                try {
+                    rev = int(raw) if raw is not None else -1;
+                } except Exception {
+                    rev = -1;
+                }
+                if rev > best {
+                    best = rev;
+                    current = rs;
+                }
+            }
+        }
+        if current is None {
+            return None;
+        }
+        labels = current.metadata.labels;
+        h = labels.get(hash_key) if labels else None;
+        return str(h) if h else None;
+    }
+
+    def _current_gen_crash(
+        core_v1: any, ns: str, template_hash: str, threshold: int = 3
+    ) -> str {
+        # Report a crash-looping pod belonging *only* to the given
+        # pod-template-hash (the current generation). A container is fatal
+        # when it has restarted at/above the threshold and is neither running
+        # nor cleanly completed - mirroring check_pods_restarted's liveness
+        # test so a container that restarted once and recovered, or an init
+        # container that exited 0, is not misread as a failure.
+        try {
+            pods = core_v1.list_namespaced_pod(
+                namespace=ns, label_selector=f"pod-template-hash={template_hash}"
+            );
+        } except Exception {
+            return "";
+        }
+        for p in pods.items {
+            statuses = (p.status.init_container_statuses or []) + (
+                p.status.container_statuses or []
+            );
+            for cs in statuses {
+                if (cs.restart_count or 0) < threshold {
+                    continue;
+                }
+                running = cs.state and cs.state.running;
+                term = cs.state.terminated if cs.state else None;
+                completed_ok = term is not None and (term.exit_code or 0) == 0;
+                if (not running) and (not completed_ok) {
+                    return (
+                        f"pod '{p.metadata.name}' container '{cs.name}' "
+                        f"crash-looping ({cs.restart_count} restarts)"
+                    );
+                }
+            }
+        }
+        return "";
     }
 
     def _deploy_observability(app_name: str) -> None {
