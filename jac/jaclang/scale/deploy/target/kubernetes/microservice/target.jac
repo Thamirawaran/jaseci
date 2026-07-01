@@ -149,7 +149,6 @@ obj KubernetesMicroserviceTarget(KubernetesTarget) {
         }
         self._load_kube_config();
         apps_v1 = client.AppsV1Api();
-        core_v1 = client.CoreV1Api();
         ns = self.k8s_config.namespace;
         total = len(names);
         elapsed = 0;
@@ -158,15 +157,67 @@ obj KubernetesMicroserviceTarget(KubernetesTarget) {
         with console.status(f"Rolling out fleet: 0/{total} services ready...") as st {
             while elapsed < timeout {
                 ready = 0;
+                failure = "";
+                details: list[str] = [];
                 for name in names {
                     try {
                         d = apps_v1.read_namespaced_deployment(name=name, namespace=ns);
-                        if (d.status.ready_replicas or 0) >= 1 {
-                            ready += 1;
-                        }
                     } except Exception {
-                        _ = 0;
+                        continue;
                     }
+                    # All counters below are maintained by the Deployment
+                    # controller and scoped to the current ReplicaSet, so pods
+                    # from a superseded revision that are still being
+                    # garbage-collected never enter the verdict.
+                    status = d.status;
+                    desired = (
+                        d.spec.replicas
+                            if (d.spec and d.spec.replicas is not None)
+                            else 1
+                    );
+                    observed = (status.observed_generation or 0) if status else 0;
+                    generation = (d.metadata.generation or 0) if d.metadata else 0;
+                    updated = (status.updated_replicas or 0) if status else 0;
+                    replicas = (status.replicas or 0) if status else 0;
+                    available = (status.available_replicas or 0) if status else 0;
+
+                    # Fail fast on a genuinely stuck rollout: the controller
+                    # flips Progressing=False/ProgressDeadlineExceeded once the
+                    # new ReplicaSet fails to make progress within the
+                    # Deployment's progressDeadlineSeconds. Only trusted once
+                    # status has caught up with the spec we just applied.
+                    if status and status.conditions and observed >= generation {
+                        for cond in status.conditions {
+                            if (
+                                cond.type == "Progressing"
+                                and cond.status == "False"
+                                and cond.reason == "ProgressDeadlineExceeded"
+                            ) {
+                                failure = (
+                                    f"deployment '{name}' failed to roll out: "
+                                    f"{cond.message or cond.reason}"
+                                );
+                            }
+                        }
+                    }
+
+                    # Complete == kubectl's definition: status is current, every
+                    # new-template pod exists, no old pods linger, and the new
+                    # pods are available.
+                    rolled_out = (
+                        observed >= generation
+                        and updated >= desired
+                        and replicas <= updated
+                        and available >= updated
+                    );
+                    if rolled_out {
+                        ready += 1;
+                    }
+                    details.append(f"{name}={available}/{desired}");
+                }
+
+                if failure {
+                    raise Exception(failure);
                 }
                 if ready == total {
                     if self.logger {
@@ -176,32 +227,7 @@ obj KubernetesMicroserviceTarget(KubernetesTarget) {
                     }
                     return;
                 }
-
-                crash = "";
-                phases: list[str] = [];
-                try {
-                    for p in core_v1.list_namespaced_pod(namespace=ns).items {
-                        for cs in (p.status.container_statuses or []) {
-                            if (cs.restart_count or 0) >= 3 {
-                                crash = (
-                                    f"pod '{p.metadata.name}' crash-looping "
-                                    f"({cs.restart_count} restarts)"
-                                );
-                            }
-                        }
-                        labels = p.metadata.labels or {};
-                        app = str(labels.get("app", ""));
-                        if app {
-                            phases.append(f"{app}={p.status.phase or '?'}");
-                        }
-                    }
-                } except Exception {
-                    _ = 0;
-                }
-                if crash {
-                    raise Exception(crash);
-                }
-                detail = ", ".join(phases) if phases else "scheduling pods";
+                detail = ", ".join(details) if details else "scheduling pods";
                 st.update(
                     f"Rolling out fleet: {ready}/{total} ready - {elapsed}s "
                     f"elapsed ({detail}) - pods install jac + start the app"
