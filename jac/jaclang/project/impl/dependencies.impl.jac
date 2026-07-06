@@ -442,7 +442,6 @@ impl DependencyResolver.resolve(include_dev: bool = False) -> list[ResolvedDepen
 }
 
 def _clear_status_line {
-    import sys;
     out: any = sys.stdout;
     try {
         if out.isatty() {
@@ -453,13 +452,11 @@ def _clear_status_line {
 }
 
 def _spec_base_name(spec: str) -> str {
-    import re;
     m = re.match(r"^([A-Za-z0-9._-]+)\s*(?:[<>=!~@;\[]|$)", spec.strip());
     return m.group(1).lower() if m else "";
 }
 
 def _extract_terminal_error(stderr: str) -> str {
-    import re;
     lines = [
         ln.strip()
         for ln in stderr.splitlines()
