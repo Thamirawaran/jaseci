@@ -2500,9 +2500,14 @@ test "builtin functions lower to runtime helpers without type-check (#7480)" {
     );
     js_code = es_to_js(EsastGenPass(ir_in=ir, prog=prog).ir_out.gen.es_ast);
 
-    fn_idx = js_code.find("function summarize");
-    assert fn_idx >= 0 , "compiled function summarize must be present";
-    user_js = js_code[fn_idx:];
+    fn_starts = [
+        js_code.find("function " + fn)
+        for fn in ["summarize", "numeric", "combined"]
+    ];
+    assert all([idx >= 0 for idx in fn_starts]) , (
+        "compiled user functions must be present"
+    );
+    user_js = js_code[min(fn_starts):];
     for name in [
         "sorted", "len", "sum", "min", "max", "abs", "round", "enumerate",
         "zip", "range"
@@ -2513,6 +2518,11 @@ test "builtin functions lower to runtime helpers without type-check (#7480)" {
         );
     }
 
+    import shutil;
+    if not shutil.which("node") {
+        import pytest;
+        pytest.skip("node not on PATH");
+    }
     wrapper = (
         js_code + "\nconsole.log(JSON.stringify({" + "  summarize: summarize([3, 1, 2])," + "  numeric: numeric(5)," + "  zipped: combined([1, 2], [3, 4])[2]" + "}));\n"
     );
