@@ -307,12 +307,20 @@ def resolve_module(target: str, base_path: str) -> tuple[(str, str)] {
     }
 
     if not target.startswith('.') {
+        spec_parts = target.split('.');
         try {
-            spec = importlib.util.find_spec(target);
+            spec = importlib.util.find_spec(spec_parts[0]);
         } except (ImportError, AttributeError, ValueError) {
             spec = None;
         }
-        if (spec and spec.origin and (spec.origin not in {'built-in', 'frozen'})) {
+        if (spec and (len(spec_parts) > 1)) {
+            for loc in (spec.submodule_search_locations or []) {
+                res = _candidate_from(str(loc), spec_parts[1:]);
+                if res {
+                    return res;
+                }
+            }
+        } elif (spec and spec.origin and (spec.origin not in {'built-in', 'frozen'})) {
             origin = os.path.normpath(spec.origin);
             lang = language_of(origin);
             if (lang != 'other') {
